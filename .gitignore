@@ -1,0 +1,11 @@
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.db
+*.log
+pip_install.log
+screenshot_*.png
+*.whl
+.env

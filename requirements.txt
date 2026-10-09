@@ -1,0 +1,8 @@
+PySide6-Essentials==6.7.2
+shiboken6==6.7.2
+argon2-cffi==23.1.0
+cryptography==43.0.1
+pyotp==2.9.0
+qrcode==7.4.2
+Pillow==10.4.0
+zxcvbn==4.4.28
