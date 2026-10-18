@@ -2,8 +2,8 @@
 
 A professional, open-source desktop password manager built with Python and PySide6. All passwords are encrypted end-to-end on your local machine — no cloud, no telemetry, no third-party servers.
 
-![Auth Screen](screenshot_auth.png)
-![Vault Screen](screenshot_vault.png)
+![Sign-in screen](docs/screenshots/auth.png)
+![Vault screen](docs/screenshots/vault.png)
 
 ---
 
@@ -17,6 +17,10 @@ A professional, open-source desktop password manager built with Python and PySid
 - **Multiple user accounts** — each user has a completely independent vault and key
 - **Two-Factor Authentication (TOTP)** — compatible with Google Authenticator, Authy, and any RFC 6238 app
 - **Recovery key** — a high-entropy offline backup key that can reset your master password without data loss
+- **Encrypted recovery file (`.svrk`)** — the recovery key is saved in an app-only encrypted file; opened in a text editor it is scrambled text
+- **Master password rules** — at least 8 characters with uppercase, lowercase, a number and a special character, and it cannot be your username (or username + digits)
+- **Responsive, non-blocking UI** — key derivation runs in the background, so the window never freezes while unlocking
+- **Keyboard shortcuts** — `Ctrl+N` new entry, `Ctrl+F` search, `Ctrl+G` generator, `Ctrl+L` lock, `Del` delete, `Esc` clear search
 - **Password generator** — cryptographically secure, configurable length/charset, avoids ambiguous characters
 - **Password strength meter** — powered by zxcvbn (realistic crack-time estimates, not just character-class rules)
 - **Auto-lock** — vault locks automatically after configurable inactivity (default 5 minutes)
@@ -133,6 +137,8 @@ At registration you receive a 256-bit recovery key (base32, grouped for readabil
 ```
 XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX
 ```
+
+You can save it as an encrypted `.svrk` file and load it later from **Forgot Password → Load Recovery File**. The file is encrypted with a key built into the app, so it protects against casual reading and tampering, not against someone with the source code — treat it like the key itself.
 
 **Store it offline** (USB drive, printed copy, safe). Anyone with this key and your username can reset your master password. SecureVaultPM has no server — if you lose both your password and this key, vault data cannot be recovered.
 

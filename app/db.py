@@ -138,6 +138,18 @@ def update_wrapped_dek_password(user_id: int, pw_salt, pw_params, wrapped_dek_pa
         )
 
 
+def update_wrapped_dek_recovery(user_id: int, rec_salt, rec_params, wrapped_dek_recovery):
+    with get_conn() as conn:
+        conn.execute(
+            """UPDATE users SET
+                recovery_salt=?, recovery_time_cost=?, recovery_memory_cost=?, recovery_parallelism=?,
+                wrapped_dek_recovery=?
+               WHERE id=?""",
+            (rec_salt, rec_params.time_cost, rec_params.memory_cost, rec_params.parallelism,
+             wrapped_dek_recovery, user_id),
+        )
+
+
 def set_totp(user_id: int, enabled: bool, secret_encrypted):
     with get_conn() as conn:
         conn.execute(
@@ -179,17 +191,17 @@ def add_vault_item(user_id: int, encrypted_blob: bytes) -> int:
         return cur.lastrowid
 
 
-def update_vault_item(item_id: int, encrypted_blob: bytes):
+def update_vault_item(user_id: int, item_id: int, encrypted_blob: bytes):
     with get_conn() as conn:
         conn.execute(
-            "UPDATE vault_items SET encrypted_blob=?, updated_at=? WHERE id=?",
-            (encrypted_blob, now_iso(), item_id),
+            "UPDATE vault_items SET encrypted_blob=?, updated_at=? WHERE id=? AND user_id=?",
+            (encrypted_blob, now_iso(), item_id, user_id),
         )
 
 
-def delete_vault_item(item_id: int):
+def delete_vault_item(user_id: int, item_id: int):
     with get_conn() as conn:
-        conn.execute("DELETE FROM vault_items WHERE id=?", (item_id,))
+        conn.execute("DELETE FROM vault_items WHERE id=? AND user_id=?", (item_id, user_id))
 
 
 def list_vault_items(user_id: int):
