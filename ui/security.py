@@ -59,3 +59,18 @@ class ClipboardGuard(QObject):
         if clipboard.text() == self._last_copied:
             clipboard.clear()
         self._last_copied = None
+
+    def clear_now(self):
+        if self._last_copied is not None:
+            self._timer.stop()
+            self._clear()
+
+
+_shared_clipboard_guard = None
+
+
+def shared_clipboard_guard() -> ClipboardGuard:
+    global _shared_clipboard_guard
+    if _shared_clipboard_guard is None:
+        _shared_clipboard_guard = ClipboardGuard(seconds=25, parent=QApplication.instance())
+    return _shared_clipboard_guard

@@ -9,3 +9,6 @@ pip_install.log
 screenshot_*.png
 *.whl
 .env
+.idea/
+*_recovery_token.json
+*.svrk

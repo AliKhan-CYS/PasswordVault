@@ -66,11 +66,11 @@ def update_item(session: Session, item: VaultItem):
     if item.id is None:
         raise ValueError("Item has no id.")
     blob = _encrypt_item(session.dek, item)
-    db.update_vault_item(item.id, blob)
+    db.update_vault_item(session.user_id, item.id, blob)
 
 
-def delete_item(item_id: int):
-    db.delete_vault_item(item_id)
+def delete_item(session: Session, item_id: int):
+    db.delete_vault_item(session.user_id, item_id)
 
 
 def list_items(session: Session) -> list[VaultItem]:
@@ -78,11 +78,10 @@ def list_items(session: Session) -> list[VaultItem]:
     return [_decrypt_item(session.dek, row) for row in rows]
 
 
-def search_items(session: Session, query: str) -> list[VaultItem]:
+def filter_items(items: list[VaultItem], query: str) -> list[VaultItem]:
     query = query.strip().lower()
-    items = list_items(session)
     if not query:
-        return items
+        return list(items)
     return [
         it for it in items
         if query in it.title.lower()
@@ -127,11 +126,18 @@ def generate_password(length: int = 20, use_upper=True, use_lower=True,
     return "".join(password_chars[:length])
 
 
-def password_strength(password: str) -> dict:
-    """Returns zxcvbn's analysis: score (0-4), guesses, crack-time estimate, feedback."""
-    result = zxcvbn(password)
+STRENGTH_LABELS = ["Very weak", "Weak", "Fair", "Good", "Strong"]
+
+
+def password_strength(password: str, user_inputs: Optional[list[str]] = None) -> dict:
+    """Returns zxcvbn's analysis: score (0-4), label, crack-time estimate, feedback."""
+    if not password:
+        return {"score": 0, "label": "", "crack_time_display": "", "feedback": {}}
+    # zxcvbn gets slow on very long inputs; 64 chars is plenty for an estimate.
+    result = zxcvbn(password[:64], user_inputs=[u for u in (user_inputs or []) if u])
     return {
         "score": result["score"],
+        "label": STRENGTH_LABELS[result["score"]],
         "crack_time_display": result["crack_times_display"]["offline_slow_hashing_1e4_per_second"],
         "feedback": result["feedback"],
     }
