@@ -23,10 +23,11 @@ from app import db, crypto
 from app.auth import Session, AuthError
 
 RECOVERY_FILE_EXT = ".svrk"
-RECOVERY_FILE_FILTER = "SecureVaultPM Recovery File (*.svrk)"
+RECOVERY_FILE_FILTER = "SecureVault Backup Key (*.svrk)"
 _MAGIC = b"SVPM-RK2"
 _FILE_KEY = hashlib.sha256(b"SecureVaultPM/recovery-file/v2/" + _MAGIC).digest()
 _LEGACY_HEADER = "SECUREVAULTPM-RECOVERY-TOKEN-V1"
+_MAX_FILE_CHARS = 16_384
 
 
 def write_recovery_file(path: str, username: str, recovery_key: str):
@@ -41,10 +42,19 @@ def write_recovery_file(path: str, username: str, recovery_key: str):
         f.write(text + "\n")
 
 
+def _key_fields(data) -> dict:
+    if not isinstance(data, dict) or not isinstance(data.get("username"), str) \
+            or not isinstance(data.get("recovery_key"), str):
+        raise AuthError("This is not a SecureVault backup key file.")
+    return {"username": data["username"], "recovery_key": data["recovery_key"]}
+
+
 def read_recovery_file(path: str) -> dict:
     """Returns {"username": ..., "recovery_key": ...}."""
     with open(path, "r", encoding="utf-8", errors="replace") as f:
-        content = f.read().strip()
+        content = f.read(_MAX_FILE_CHARS + 1).strip()
+    if len(content) > _MAX_FILE_CHARS:
+        raise AuthError("This is not a SecureVault backup key file.")
 
     if content.startswith("{"):
         # Plaintext JSON files from v1 of the app.
@@ -52,22 +62,21 @@ def read_recovery_file(path: str) -> dict:
             data = json.loads(content)
         except json.JSONDecodeError:
             data = {}
-        if data.get("header") == _LEGACY_HEADER:
-            return {"username": data["username"], "recovery_key": data["recovery_key"]}
-        raise AuthError("This is not a SecureVaultPM recovery file.")
+        if isinstance(data, dict) and data.get("header") == _LEGACY_HEADER:
+            return _key_fields(data)
+        raise AuthError("This is not a SecureVault backup key file.")
 
     try:
         blob = base64.b64decode("".join(content.split()), validate=True)
     except ValueError:
-        raise AuthError("This is not a SecureVaultPM recovery file.")
+        raise AuthError("This is not a SecureVault backup key file.")
     if not blob.startswith(_MAGIC):
-        raise AuthError("This is not a SecureVaultPM recovery file.")
+        raise AuthError("This is not a SecureVault backup key file.")
     try:
         payload = crypto.decrypt(_FILE_KEY, blob[len(_MAGIC):], aad=_MAGIC)
     except InvalidTag:
-        raise AuthError("The recovery file is corrupted or has been modified.")
-    data = json.loads(payload.decode("utf-8"))
-    return {"username": data["username"], "recovery_key": data["recovery_key"]}
+        raise AuthError("This backup key file is damaged or has been changed.")
+    return _key_fields(json.loads(payload.decode("utf-8")))
 
 
 def regenerate_recovery_key(session: Session) -> str:

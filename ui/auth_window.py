@@ -7,13 +7,13 @@ from PySide6.QtWidgets import (
     QComboBox, QFrame, QFileDialog, QGraphicsDropShadowEffect, QScrollArea, QMessageBox, QSizePolicy,
 )
 
-from app import db, auth, recovery as recovery_mod
+from app import db, auth, brands, recovery as recovery_mod
 from app.auth import AuthError, TwoFactorRequiredError
 from ui.dialogs import RecoveryKeyDialog, TwoFactorPromptDialog
 from ui.styles import ACCENT_2, MUTED
 from ui.widgets import (
     PasswordField, StrengthMeter, RuleChecklist, run_in_background, set_busy, set_error,
-    logo_pixmap, shake,
+    logo_pixmap, shake, entry_icon_pixmap,
 )
 
 
@@ -92,17 +92,17 @@ class AuthWindow(QWidget):
         title.setStyleSheet("font-size: 44px; font-weight: 800; color: white;")
         layout.addWidget(title)
 
-        tagline = QLabel(f"Every password you own.<br><span style='color:{ACCENT_2}'>One key only you hold.</span>")
+        tagline = QLabel(f"All your passwords.<br><span style='color:{ACCENT_2}'>Safe in one place.</span>")
         tagline.setStyleSheet("font-size: 22px; font-weight: 600; color: #e9ebf8;")
         tagline.setWordWrap(True)
         layout.addWidget(tagline)
         layout.addSpacing(10)
 
         for headline, detail in (
-            ("AES-256-GCM encryption", "Every entry is encrypted before it touches the disk."),
-            ("Argon2id key derivation", "Your master password is never stored, only verified."),
-            ("Two-factor authentication", "Add an authenticator app for a second lock."),
-            ("Encrypted recovery file", "Reset a forgotten password without losing data."),
+            ("Everything in one place", "Banks, wallets, email, Netflix, Spotify and more, neatly sorted."),
+            ("Only you can open it", "One master password opens your vault. Nobody else can."),
+            ("Extra lock with your phone", "Turn on a login code from your phone for even more safety."),
+            ("Never get locked out", "Forgot your password? Your backup key gets you back in."),
         ):
             item = QLabel(
                 f"<span style='color:{ACCENT_2}; font-size:15px'>&#10003;</span>&nbsp;&nbsp;"
@@ -111,6 +111,21 @@ class AuthWindow(QWidget):
             )
             item.setStyleSheet("font-size: 14px;")
             layout.addWidget(item)
+
+        layout.addSpacing(12)
+        works = QLabel("WORKS WITH ALL YOUR ACCOUNTS")
+        works.setObjectName("FieldLabel")
+        layout.addWidget(works)
+        strip = QHBoxLayout()
+        strip.setSpacing(10)
+        for key in ("hbl", "meezan", "jazzcash", "easypaisa", "gmail", "netflix", "spotify", "daraz"):
+            logo_lbl = QLabel()
+            brand = brands.BRAND_BY_KEY[key]
+            logo_lbl.setPixmap(entry_icon_pixmap(brand.name, brand, 38))
+            logo_lbl.setToolTip(brand.name)
+            strip.addWidget(logo_lbl)
+        strip.addStretch()
+        layout.addLayout(strip)
         return hero
 
     def _build_card(self) -> QFrame:
@@ -164,8 +179,8 @@ class AuthWindow(QWidget):
         self._fit_to_tab(index)
         heading, sub = [
             ("Welcome back", "Unlock your vault to continue."),
-            ("Create your vault", "Pick a master password you'll remember. It can't be viewed by anyone."),
-            ("Recover your account", "Use your recovery file or key to set a new master password."),
+            ("Create your vault", "Choose one strong password you'll remember. It unlocks everything."),
+            ("Get back in", "Use the backup key you saved when you signed up."),
         ][index]
         self.card_heading.setText(heading)
         self.card_sub.setText(sub)
@@ -314,12 +329,12 @@ class AuthWindow(QWidget):
     def _build_recovery_tab(self) -> QWidget:
         page, layout = _tab_page()
 
-        load_btn = QPushButton("Load Recovery File...")
+        load_btn = QPushButton("Open Backup Key File...")
         load_btn.setObjectName("Secondary")
         load_btn.setMinimumHeight(40)
         load_btn.clicked.connect(self._load_recovery_file)
         layout.addWidget(load_btn)
-        self.rec_file_status = QLabel("or type your username and recovery key below")
+        self.rec_file_status = QLabel("or type your username and backup key below")
         self.rec_file_status.setObjectName("Muted")
         self.rec_file_status.setAlignment(Qt.AlignCenter)
         layout.addWidget(self.rec_file_status)
@@ -332,7 +347,7 @@ class AuthWindow(QWidget):
         self.rec_confirm = PasswordField("Repeat new master password")
 
         _field(layout, "Username", self.rec_username)
-        _field(layout, "Recovery key", self.rec_key)
+        _field(layout, "Backup key", self.rec_key)
         _field(layout, "New master password", self.rec_new)
         _field(layout, "Confirm new password", self.rec_confirm)
 
@@ -359,20 +374,20 @@ class AuthWindow(QWidget):
 
     def _load_recovery_file(self):
         path, _ = QFileDialog.getOpenFileName(
-            self, "Open Recovery File", "",
-            f"{recovery_mod.RECOVERY_FILE_FILTER};;Legacy recovery token (*.json);;All files (*)",
+            self, "Open Backup Key File", "",
+            f"{recovery_mod.RECOVERY_FILE_FILTER};;Older backup key file (*.json);;All files (*)",
         )
         if not path:
             return
         try:
             data = recovery_mod.read_recovery_file(path)
-        except AuthError as e:
-            _show_error(self.rec_error, str(e))
+        except (AuthError, OSError) as e:
+            _show_error(self.rec_error, str(e) if isinstance(e, AuthError) else "Could not open that file.")
             shake(self.card)
             return
         self.rec_username.setText(data["username"])
         self.rec_key.setText(data["recovery_key"])
-        self.rec_file_status.setText(f"<span style='color:#22c55e'>&#10003; Recovery file loaded for "
+        self.rec_file_status.setText(f"<span style='color:#22c55e'>&#10003; Backup key loaded for "
                                      f"<b>{data['username']}</b></span>")
         self.rec_file_status.setTextFormat(Qt.RichText)
         _show_error(self.rec_error, "")
@@ -393,12 +408,12 @@ class AuthWindow(QWidget):
         for field in (self.rec_key, self.rec_new, self.rec_confirm):
             field.clear()
         self.rec_username.clear()
-        self.rec_file_status.setText("or type your username and recovery key below")
+        self.rec_file_status.setText("or type your username and backup key below")
         QMessageBox.information(
             self, "Password reset",
             "Your master password has been reset and your vault is unlocked.\n\n"
-            "Your recovery key is still valid. For extra safety you can create a new one "
-            "from Settings > Regenerate Recovery Key.",
+            "Your backup key still works. For extra safety you can create a new one "
+            "from Settings > New Backup Key.",
         )
         self.tabs.setCurrentIndex(0)
         self.authenticated.emit(session)

@@ -10,12 +10,12 @@ so there's no plaintext metadata leakage even about field structure.
 import json
 import secrets
 import string
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 
 from zxcvbn import zxcvbn
 
-from app import db, crypto
+from app import db, crypto, brands
 from app.auth import Session
 
 
@@ -27,6 +27,8 @@ class VaultItem:
     username: str
     password: str
     notes: str = ""
+    category: str = brands.DEFAULT_CATEGORY
+    brand: str = ""
     created_at: str = ""
     updated_at: str = ""
 
@@ -38,6 +40,8 @@ def _encrypt_item(dek: bytes, item: VaultItem) -> bytes:
         "username": item.username,
         "password": item.password,
         "notes": item.notes,
+        "category": item.category,
+        "brand": item.brand,
     }).encode("utf-8")
     return crypto.encrypt(dek, payload)
 
@@ -52,6 +56,8 @@ def _decrypt_item(dek: bytes, row) -> VaultItem:
         username=data["username"],
         password=data["password"],
         notes=data.get("notes", ""),
+        category=data.get("category") if data.get("category") in brands.CATEGORY_BY_KEY else brands.DEFAULT_CATEGORY,
+        brand=data.get("brand", ""),
         created_at=created_at,
         updated_at=updated_at,
     )
@@ -78,7 +84,9 @@ def list_items(session: Session) -> list[VaultItem]:
     return [_decrypt_item(session.dek, row) for row in rows]
 
 
-def filter_items(items: list[VaultItem], query: str) -> list[VaultItem]:
+def filter_items(items: list[VaultItem], query: str, category: Optional[str] = None) -> list[VaultItem]:
+    if category:
+        items = [it for it in items if it.category == category]
     query = query.strip().lower()
     if not query:
         return list(items)

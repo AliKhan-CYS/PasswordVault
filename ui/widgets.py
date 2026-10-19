@@ -6,7 +6,7 @@ from PySide6.QtCore import (
     Qt, QObject, QRunnable, QThreadPool, Signal, Slot, QTimer, QRectF, QPointF,
     QPropertyAnimation, QEasingCurve, QSequentialAnimationGroup, QPoint,
 )
-from PySide6.QtGui import QPixmap, QPainter, QColor, QLinearGradient, QPen, QFont, QIcon
+from PySide6.QtGui import QPixmap, QPainter, QColor, QLinearGradient, QPen, QFont, QIcon, QImage, QPainterPath
 from PySide6.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QGridLayout, QLineEdit, QPushButton, QLabel,
     QProgressBar, QGraphicsOpacityEffect, QApplication,
@@ -161,6 +161,81 @@ def avatar_pixmap(text: str, size: int) -> QPixmap:
     p.end()
     pm.setDevicePixelRatio(ratio)
     return pm
+
+
+# ---------- brand logos & category icons ----------
+
+_logo_cache: dict[str, QImage] = {}
+
+
+def brand_logo(brand) -> QImage:
+    if brand is None:
+        return None
+    if brand.key not in _logo_cache:
+        path = brand.logo_path
+        img = QImage(path) if path else QImage()
+        _logo_cache[brand.key] = None if img.isNull() else img
+    return _logo_cache[brand.key]
+
+
+def draw_entry_icon(painter: QPainter, rect: QRectF, title: str, brand=None):
+    """Brand logo on a rounded tile, or a coloured initial when the service is unknown."""
+    logo = brand_logo(brand)
+    if logo is None:
+        draw_avatar(painter, rect, title)
+        return
+    painter.save()
+    painter.setRenderHint(QPainter.Antialiasing)
+    painter.setRenderHint(QPainter.SmoothPixmapTransform)
+    path = QPainterPath()
+    radius = rect.width() * 0.26
+    path.addRoundedRect(rect, radius, radius)
+    painter.setClipPath(path)
+    painter.fillRect(rect, QColor("#2a2e52"))
+    painter.drawImage(rect, logo)
+    painter.restore()
+
+
+def entry_icon_pixmap(title: str, brand, size: int) -> QPixmap:
+    ratio = 2
+    pm = QPixmap(size * ratio, size * ratio)
+    pm.fill(Qt.transparent)
+    p = QPainter(pm)
+    draw_entry_icon(p, QRectF(0, 0, size * ratio, size * ratio), title, brand)
+    p.end()
+    pm.setDevicePixelRatio(ratio)
+    return pm
+
+
+def draw_symbol_tile(painter: QPainter, rect: QRectF, symbol: str, color: str):
+    painter.save()
+    painter.setRenderHint(QPainter.Antialiasing)
+    tint = QColor(color)
+    tint.setAlpha(60)
+    painter.setPen(Qt.NoPen)
+    painter.setBrush(tint)
+    painter.drawRoundedRect(rect, rect.width() * 0.3, rect.height() * 0.3)
+    font = QFont("Segoe UI Emoji")
+    font.setPixelSize(int(rect.height() * 0.52))
+    painter.setFont(font)
+    painter.setPen(QColor("white"))
+    painter.drawText(rect, Qt.AlignCenter, symbol)
+    painter.restore()
+
+
+def symbol_icon(symbol: str, color: str, size: int = 24) -> QIcon:
+    ratio = 2
+    pm = QPixmap(size * ratio, size * ratio)
+    pm.fill(Qt.transparent)
+    p = QPainter(pm)
+    draw_symbol_tile(p, QRectF(0, 0, size * ratio, size * ratio), symbol, color)
+    p.end()
+    pm.setDevicePixelRatio(ratio)
+    return QIcon(pm)
+
+
+def brand_icon(brand, size: int = 24) -> QIcon:
+    return QIcon(entry_icon_pixmap(brand.name, brand, size))
 
 
 # ---------- inputs ----------
