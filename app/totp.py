@@ -35,7 +35,7 @@ def verify_code(secret: str, code: str) -> bool:
 
 def enable_2fa(session: Session, secret: str, confirm_code: str):
     if not verify_code(secret, confirm_code):
-        raise ValueError("Invalid verification code. 2FA was not enabled.")
+        raise ValueError("That code didn't match. Check your phone and try again.")
     encrypted_secret = crypto.encrypt_str(session.dek, secret)
     db.set_totp(session.user_id, True, encrypted_secret)
 

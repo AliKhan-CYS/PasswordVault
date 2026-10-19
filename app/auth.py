@@ -132,7 +132,7 @@ def _check_lockout(user: dict):
 def login(username: str, master_password: str, totp_code: Optional[str] = None) -> Session:
     user = db.get_user_by_username(username.strip())
     if not user:
-        raise AuthError("Invalid username or password.")
+        raise AuthError("Wrong username or password.")
 
     _check_lockout(user)
 
@@ -141,7 +141,7 @@ def login(username: str, master_password: str, totp_code: Optional[str] = None) 
         dek = crypto.unwrap_dek(user["wrapped_dek_password"], kek_password)
     except InvalidTag:
         _on_failed_attempt(user)
-        raise AuthError("Invalid username or password.")
+        raise AuthError("Wrong username or password.")
 
     if user["totp_enabled"]:
         from app import totp as totp_mod
@@ -150,7 +150,7 @@ def login(username: str, master_password: str, totp_code: Optional[str] = None) 
             raise TwoFactorRequiredError("TOTP code required.")
         if not totp_mod.verify_code(secret, totp_code):
             _on_failed_attempt(user)
-            raise AuthError("Invalid 2FA code.")
+            raise AuthError("That login code is incorrect. Try the latest code from your app.")
 
     db.reset_failed_attempts(user["id"])
     return Session(user_id=user["id"], username=user["username"], dek=dek)
@@ -194,13 +194,16 @@ def recover_account(username: str, recovery_key: str, new_master_password: str) 
     existing DEK so no vault data is lost."""
     user = db.get_user_by_username(username.strip())
     if not user:
-        raise AuthError("Invalid username or recovery key.")
+        raise AuthError("Wrong username or backup key.")
+
+    _check_lockout(user)
 
     kek_recovery = crypto.derive_key(normalize_recovery_key(recovery_key), _kdf_params(user, "recovery"))
     try:
         dek = crypto.unwrap_dek(user["wrapped_dek_recovery"], kek_recovery)
     except InvalidTag:
-        raise AuthError("Invalid username or recovery key.")
+        _on_failed_attempt(user)
+        raise AuthError("Wrong username or backup key.")
 
     validate_master_password(user["username"], new_master_password)
     pw_params, wrapped = _wrap_with_new_password(dek, new_master_password)

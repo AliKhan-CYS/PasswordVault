@@ -14,7 +14,6 @@ master password never requires re-encrypting the whole vault — only the
 wrapped DEK is re-wrapped.
 """
 
-import os
 import secrets
 import base64
 from dataclasses import dataclass

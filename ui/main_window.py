@@ -11,26 +11,33 @@ from PySide6.QtWidgets import (
     QStyledItemDelegate, QStyle, QScrollArea, QApplication,
 )
 
-from app import vault, totp as totp_mod, recovery as recovery_mod, db
+from app import vault, totp as totp_mod, recovery as recovery_mod, db, brands
 from app.auth import Session
 from ui.dialogs import (
     ItemEditorDialog, PasswordGeneratorDialog, TwoFactorSetupDialog, ChangePasswordDialog,
     RecoveryKeyDialog, ConfirmPasswordDialog, AutoLockDialog,
 )
 from ui.security import shared_clipboard_guard
-from ui.styles import ACCENT, MUTED, TEXT, SURFACE_2
+from ui.styles import ACCENT, MUTED, SURFACE_2
 from ui.widgets import (
-    StrengthMeter, Toast, logo_pixmap, avatar_pixmap, draw_avatar, run_in_background, fade_in,
+    StrengthMeter, Toast, logo_pixmap, avatar_pixmap, run_in_background, fade_in,
+    draw_entry_icon, entry_icon_pixmap, draw_symbol_tile,
 )
 
 ITEM_ID_ROLE = Qt.UserRole
 TITLE_ROLE = Qt.UserRole + 1
 SUBTITLE_ROLE = Qt.UserRole + 2
+BRAND_ROLE = Qt.UserRole + 3
+COUNT_ROLE = Qt.UserRole + 4
 MASK = "\u2022" * 12
 
 
 def display_name(item: vault.VaultItem) -> str:
     return item.title or item.website_or_app or "Untitled"
+
+
+def item_brand(item: vault.VaultItem):
+    return brands.resolve_brand(item.brand, item.website_or_app, item.title)
 
 
 def website_url(text: str):
@@ -82,7 +89,7 @@ class EntryDelegate(QStyledItemDelegate):
         title = index.data(TITLE_ROLE) or ""
         subtitle = index.data(SUBTITLE_ROLE) or ""
         avatar = QRectF(rect.left() + 12, rect.center().y() - 19, 38, 38)
-        draw_avatar(painter, avatar, title)
+        draw_entry_icon(painter, avatar, title, brands.BRAND_BY_KEY.get(index.data(BRAND_ROLE)))
 
         text_left = avatar.right() + 14
         text_width = rect.right() - text_left - 10
@@ -102,6 +109,60 @@ class EntryDelegate(QStyledItemDelegate):
         fm = painter.fontMetrics()
         painter.drawText(QRectF(text_left, rect.top() + 32, text_width, 18), Qt.AlignLeft | Qt.AlignVCenter,
                          fm.elidedText(subtitle, Qt.ElideRight, int(text_width)))
+        painter.restore()
+
+
+class CategoryDelegate(QStyledItemDelegate):
+    """Sidebar row: emoji tile, category name and an entry count."""
+
+    ROW_HEIGHT = 44
+
+    def sizeHint(self, option, index):
+        return QSize(0, self.ROW_HEIGHT)
+
+    def paint(self, painter: QPainter, option, index):
+        painter.save()
+        painter.setRenderHint(QPainter.Antialiasing)
+        rect = QRectF(option.rect).adjusted(2, 2, -2, -2)
+        selected = option.state & QStyle.State_Selected
+        if selected:
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(QColor(124, 92, 255, 60))
+            painter.drawRoundedRect(rect, 10, 10)
+            painter.setBrush(QColor(ACCENT))
+            painter.drawRoundedRect(QRectF(rect.left(), rect.top() + 10, 3, rect.height() - 20), 1.5, 1.5)
+        elif option.state & QStyle.State_MouseOver:
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(QColor(SURFACE_2))
+            painter.drawRoundedRect(rect, 10, 10)
+
+        symbol, color = index.data(BRAND_ROLE)
+        tile = QRectF(rect.left() + 10, rect.center().y() - 14, 28, 28)
+        draw_symbol_tile(painter, tile, symbol, color)
+
+        count = index.data(COUNT_ROLE) or 0
+        font = QFont(option.font)
+        font.setPixelSize(12)
+        font.setBold(True)
+        painter.setFont(font)
+        count_text = str(count)
+        badge_w = max(24, painter.fontMetrics().horizontalAdvance(count_text) + 14)
+        badge = QRectF(rect.right() - badge_w - 8, rect.center().y() - 10, badge_w, 20)
+        if count:
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(QColor(ACCENT) if selected else QColor(SURFACE_2))
+            painter.drawRoundedRect(badge, 10, 10)
+        painter.setPen(QColor("#ffffff") if count else QColor(MUTED))
+        painter.drawText(badge, Qt.AlignCenter, count_text)
+
+        font.setPixelSize(13)
+        font.setBold(bool(selected))
+        painter.setFont(font)
+        painter.setPen(QColor("#ffffff") if selected or count else QColor(MUTED))
+        text_left = tile.right() + 12
+        text_rect = QRectF(text_left, rect.top(), badge.left() - text_left - 6, rect.height())
+        painter.drawText(text_rect, Qt.AlignLeft | Qt.AlignVCenter,
+                         painter.fontMetrics().elidedText(index.data(TITLE_ROLE), Qt.ElideRight, int(text_rect.width())))
         painter.restore()
 
 
@@ -149,6 +210,7 @@ class MainWindow(QWidget):
         self._items: list[vault.VaultItem] = []
         self._current: vault.VaultItem = None
         self._selected_id = None  # survives searches that temporarily hide the entry
+        self._category = None  # None = all categories
         self._build_ui()
         self._build_shortcuts()
         self.toast = Toast(self)
@@ -167,11 +229,13 @@ class MainWindow(QWidget):
         splitter = QSplitter(Qt.Horizontal)
         splitter.setHandleWidth(16)
         splitter.setChildrenCollapsible(False)
+        splitter.addWidget(self._build_category_panel())
         splitter.addWidget(self._build_list_panel())
         splitter.addWidget(self._build_detail_area())
         splitter.setStretchFactor(0, 0)
-        splitter.setStretchFactor(1, 1)
-        splitter.setSizes([380, 900])
+        splitter.setStretchFactor(1, 0)
+        splitter.setStretchFactor(2, 1)
+        splitter.setSizes([230, 350, 800])
         body.addWidget(splitter)
         root.addLayout(body, 1)
 
@@ -222,6 +286,63 @@ class MainWindow(QWidget):
         layout.addWidget(lock_btn)
         return header
 
+    def _build_category_panel(self) -> QFrame:
+        panel = QFrame()
+        panel.setObjectName("Panel")
+        panel.setMinimumWidth(200)
+        panel.setMaximumWidth(280)
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(10, 16, 10, 10)
+        layout.setSpacing(8)
+        caption = QLabel("CATEGORIES")
+        caption.setObjectName("FieldLabel")
+        caption.setContentsMargins(8, 0, 0, 0)
+        layout.addWidget(caption)
+
+        self.category_list = QListWidget()
+        self.category_list.setItemDelegate(CategoryDelegate(self.category_list))
+        self.category_list.setMouseTracking(True)
+        self.category_list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.category_list.setVerticalScrollMode(QListWidget.ScrollPerPixel)
+        rows = [(None, "All Items", brands.ALL_SYMBOL, ACCENT)]
+        rows += [(c.key, c.label, c.symbol, c.color) for c in brands.CATEGORIES]
+        for key, label, symbol, color in rows:
+            entry = QListWidgetItem()
+            entry.setData(ITEM_ID_ROLE, key)
+            entry.setData(TITLE_ROLE, label)
+            entry.setData(BRAND_ROLE, (symbol, color))
+            self.category_list.addItem(entry)
+        self.category_list.setCurrentRow(0)
+        self.category_list.currentItemChanged.connect(self._on_category_changed)
+        layout.addWidget(self.category_list, 1)
+        return panel
+
+    def _on_category_changed(self, current, _previous):
+        self._category = current.data(ITEM_ID_ROLE) if current else None
+        if self._category is not None and self.search_edit.text():
+            self.search_edit.blockSignals(True)
+            self.search_edit.clear()
+            self.search_edit.blockSignals(False)
+        self._apply_filter()
+
+    def _select_category_row(self, key):
+        for row in range(self.category_list.count()):
+            if self.category_list.item(row).data(ITEM_ID_ROLE) == key:
+                self.category_list.blockSignals(True)
+                self.category_list.setCurrentRow(row)
+                self.category_list.blockSignals(False)
+                self._category = key
+                return
+
+    def _update_category_counts(self):
+        counts = {}
+        for it in self._items:
+            counts[it.category] = counts.get(it.category, 0) + 1
+        for row in range(self.category_list.count()):
+            entry = self.category_list.item(row)
+            key = entry.data(ITEM_ID_ROLE)
+            entry.setData(COUNT_ROLE, len(self._items) if key is None else counts.get(key, 0))
+
     def _build_list_panel(self) -> QFrame:
         panel = QFrame()
         panel.setObjectName("Panel")
@@ -236,7 +357,7 @@ class MainWindow(QWidget):
         self.search_edit.setObjectName("Search")
         self.search_edit.setPlaceholderText("Search vault...   Ctrl+F")
         self.search_edit.setClearButtonEnabled(True)
-        self.search_edit.textChanged.connect(self._apply_filter)
+        self.search_edit.textChanged.connect(self._on_search_changed)
         add_btn = QPushButton("+ New")
         add_btn.setToolTip("Add entry (Ctrl+N)")
         add_btn.clicked.connect(self._add_entry)
@@ -379,6 +500,12 @@ class MainWindow(QWidget):
         esc = QShortcut(QKeySequence(Qt.Key_Escape), self.search_edit, self.search_edit.clear)
         esc.setContext(Qt.WidgetShortcut)
 
+    def _on_search_changed(self, text: str):
+        # Searching always looks through every category.
+        if text.strip() and self._category is not None:
+            self._select_category_row(None)
+        self._apply_filter()
+
     def _focus_search(self):
         self.search_edit.setFocus()
         self.search_edit.selectAll()
@@ -389,13 +516,14 @@ class MainWindow(QWidget):
         if self.session is None:
             return
         self._items = sorted(vault.list_items(self.session), key=lambda it: display_name(it).lower())
+        self._update_category_counts()
         self._apply_filter(select_id=select_id)
 
     def _apply_filter(self, *_, select_id: int = None):
         if select_id is None:
             select_id = self._selected_id
         query = self.search_edit.text()
-        shown = vault.filter_items(self._items, query)
+        shown = vault.filter_items(self._items, query, self._category)
 
         self.list_widget.blockSignals(True)
         self.list_widget.clear()
@@ -405,23 +533,33 @@ class MainWindow(QWidget):
             entry.setData(ITEM_ID_ROLE, it.id)
             entry.setData(TITLE_ROLE, display_name(it))
             entry.setData(SUBTITLE_ROLE, it.username or it.website_or_app or "No username")
+            brand = item_brand(it)
+            entry.setData(BRAND_ROLE, brand.key if brand else "")
             self.list_widget.addItem(entry)
             if it.id == select_id:
                 select_row = row
         self.list_widget.blockSignals(False)
 
-        total = len(self._items)
+        n = len(shown)
+        noun = f"ENTR{'Y' if n == 1 else 'IES'}"
         if query.strip():
-            self.count_label.setText(f"{len(shown)} OF {total} ENTRIES")
+            self.count_label.setText(f"{n} OF {len(self._items)} ENTRIES")
+        elif self._category is not None:
+            self.count_label.setText(f"{brands.CATEGORY_BY_KEY[self._category].label.upper()}  \u00B7  {n} {noun}")
         else:
-            self.count_label.setText(f"{total} ENTR{'Y' if total == 1 else 'IES'}")
+            self.count_label.setText(f"ALL ITEMS  \u00B7  {n} {noun}")
 
         has_rows = bool(shown)
         self.list_widget.setVisible(has_rows)
         self.list_empty.setVisible(not has_rows)
         if not has_rows:
-            self.list_empty.setText(f"No entries match \u201c{query.strip()}\u201d." if query.strip()
-                                    else "Nothing here yet.\nClick + New to add an entry.")
+            if query.strip():
+                self.list_empty.setText(f"No entries match \u201c{query.strip()}\u201d.")
+            elif self._category is not None:
+                self.list_empty.setText(f"No {brands.CATEGORY_BY_KEY[self._category].label} entries yet.\n"
+                                        "Click + New to add one.")
+            else:
+                self.list_empty.setText("Nothing here yet.\nClick + New to add an entry.")
 
         if select_row < 0 and has_rows:
             select_row = 0
@@ -444,21 +582,28 @@ class MainWindow(QWidget):
         if item is not None:
             self._selected_id = item.id
         if item is None:
-            if self._items:
+            if self.search_edit.text().strip():
                 self.empty_title.setText("No matching entries")
                 self.empty_sub.setText("Try a different search, or add a new entry.")
                 self.empty_btn.setText("+ Add entry")
+            elif self._category is not None:
+                cat = brands.CATEGORY_BY_KEY[self._category]
+                self.empty_title.setText(f"No {cat.label} yet")
+                self.empty_sub.setText("Add an account and pick its logo from the list.")
+                self.empty_btn.setText(f"+ Add to {cat.label}")
             else:
                 self.empty_title.setText("Your vault is empty")
-                self.empty_sub.setText("Store your first password. It's encrypted with AES-256 before it ever touches the disk.")
+                self.empty_sub.setText("Save your first password: your bank, email, Netflix, anything.\n"
+                                       "Only you can open it.")
                 self.empty_btn.setText("+ Add your first password")
             self.detail_stack.setCurrentIndex(0)
             return
 
-        self.detail_avatar.setPixmap(avatar_pixmap(display_name(item), 64))
+        self.detail_avatar.setPixmap(entry_icon_pixmap(display_name(item), item_brand(item), 64))
         self.detail_title.setText(display_name(item))
-        self.detail_site.setText(item.website_or_app if item.title else "")
-        self.detail_site.setVisible(bool(item.title and item.website_or_app))
+        cat = brands.CATEGORY_BY_KEY[item.category]
+        site = item.website_or_app if item.title else ""
+        self.detail_site.setText(cat.label + (f"   \u00B7   {site}" if site else ""))
         self.username_row.value.setText(item.username or "\u2014")
         self.reveal_btn.setChecked(False)
         self._render_password()
@@ -512,11 +657,16 @@ class MainWindow(QWidget):
     def _add_entry(self):
         if self.session is None:
             return
-        dlg = ItemEditorDialog(self)
+        dlg = ItemEditorDialog(self, category=self._category)
         if dlg.exec() != QDialog.Accepted or self.session is None:
             return
-        new_id = vault.add_item(self.session, dlg.get_item())
+        new_item = dlg.get_item()
+        new_id = vault.add_item(self.session, new_item)
+        self.search_edit.blockSignals(True)
         self.search_edit.clear()
+        self.search_edit.blockSignals(False)
+        if self._category not in (None, new_item.category):
+            self._select_category_row(new_item.category)
         self.reload_items(select_id=new_id)
         self.toast.show_message("Entry saved")
 
@@ -527,7 +677,10 @@ class MainWindow(QWidget):
         dlg = ItemEditorDialog(self, item=item)
         if dlg.exec() != QDialog.Accepted or self.session is None:
             return
-        vault.update_item(self.session, dlg.get_item())
+        updated = dlg.get_item()
+        vault.update_item(self.session, updated)
+        if self._category not in (None, updated.category):
+            self._select_category_row(updated.category)
         self.reload_items(select_id=item.id)
         self.toast.show_message("Changes saved")
 
@@ -565,10 +718,10 @@ class MainWindow(QWidget):
         menu = QMenu(self)
         menu.addAction("Change Master Password...", self._change_password)
         if totp_on:
-            menu.addAction("Disable Two-Factor Authentication...", self._disable_2fa)
+            menu.addAction("Turn Off 2-Step Login...", self._disable_2fa)
         else:
-            menu.addAction("Enable Two-Factor Authentication...", self._enable_2fa)
-        menu.addAction("Regenerate Recovery Key...", self._regenerate_recovery)
+            menu.addAction("Turn On 2-Step Login...", self._enable_2fa)
+        menu.addAction("New Backup Key...", self._regenerate_recovery)
         menu.addAction("Auto-Lock Timer...", self._configure_auto_lock)
         menu.addSeparator()
         menu.addAction("Password Generator", self._open_generator)
@@ -589,26 +742,26 @@ class MainWindow(QWidget):
 
     def _enable_2fa(self):
         if TwoFactorSetupDialog(self.session, self).exec() == QDialog.Accepted:
-            self.toast.show_message("Two-factor authentication enabled")
+            self.toast.show_message("2-step login is on")
 
     def _disable_2fa(self):
         if not ConfirmPasswordDialog.confirm(
-                self.session, "Enter your master password to turn off two-factor authentication.", self):
+                self.session, "Enter your master password to turn off 2-step login.", self):
             return
         if self.session is None:
             return
         totp_mod.disable_2fa(self.session)
-        self.toast.show_message("Two-factor authentication disabled")
+        self.toast.show_message("2-step login is off")
 
     def _regenerate_recovery(self):
         resp = QMessageBox.question(
-            self, "Regenerate Recovery Key",
-            "This creates a new recovery key and makes your old key and old recovery files useless.\n\nContinue?",
+            self, "New Backup Key",
+            "This creates a new backup key. Your old key and old backup files will stop working.\n\nContinue?",
             QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
         )
         if resp != QMessageBox.Yes:
             return
-        if not ConfirmPasswordDialog.confirm(self.session, "Enter your master password to create a new recovery key.", self):
+        if not ConfirmPasswordDialog.confirm(self.session, "Enter your master password to create a new backup key.", self):
             return
         session = self.session
         if session is None:
@@ -625,7 +778,7 @@ class MainWindow(QWidget):
 
     def _recovery_failed(self, error):
         QApplication.restoreOverrideCursor()
-        QMessageBox.critical(self, "Error", f"Could not create a new recovery key:\n{error}")
+        QMessageBox.critical(self, "Error", f"Could not create a new backup key:\n{error}")
 
     def _configure_auto_lock(self):
         user = db.get_user_by_id(self.session.user_id)
@@ -651,4 +804,5 @@ class MainWindow(QWidget):
         self.detail_title.clear()
         self.detail_site.clear()
         self.search_edit.clear()
+        self._update_category_counts()
         self.detail_stack.setCurrentIndex(0)

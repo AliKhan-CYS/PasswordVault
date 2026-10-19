@@ -1,17 +1,18 @@
 """Modal dialogs: recovery key, 2FA, re-authentication, password change, generator, item editor."""
 
-from PySide6.QtCore import Qt, QRegularExpression
+from PySide6.QtCore import Qt, QRegularExpression, QSize
 from PySide6.QtGui import QPixmap, QRegularExpressionValidator
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
     QPlainTextEdit, QCheckBox, QMessageBox, QFileDialog, QSlider, QSpinBox,
-    QGridLayout, QFrame,
+    QGridLayout, QFrame, QComboBox,
 )
 
-from app import totp as totp_mod, vault, recovery as recovery_mod, auth as auth_mod
+from app import totp as totp_mod, vault, recovery as recovery_mod, auth as auth_mod, brands
 from ui.security import shared_clipboard_guard
 from ui.widgets import (
-    PasswordField, StrengthMeter, RuleChecklist, run_in_background, set_busy, set_error, logo_pixmap,
+    PasswordField, StrengthMeter, RuleChecklist, run_in_background, set_busy, set_error,
+    symbol_icon, brand_icon,
 )
 
 
@@ -59,7 +60,7 @@ class _BaseDialog(QDialog):
 
 def save_recovery_file_dialog(parent, username: str, recovery_key: str) -> bool:
     path, _ = QFileDialog.getSaveFileName(
-        parent, "Save Encrypted Recovery File",
+        parent, "Save Backup Key File",
         f"{username}_recovery{recovery_mod.RECOVERY_FILE_EXT}", recovery_mod.RECOVERY_FILE_FILTER,
     )
     if not path:
@@ -69,11 +70,11 @@ def save_recovery_file_dialog(parent, username: str, recovery_key: str) -> bool:
     try:
         recovery_mod.write_recovery_file(path, username, recovery_key)
     except OSError as e:
-        QMessageBox.critical(parent, "Could not save", f"Failed to save the recovery file:\n{e}")
+        QMessageBox.critical(parent, "Could not save", f"Failed to save the backup key file:\n{e}")
         return False
     QMessageBox.information(
-        parent, "Recovery file saved",
-        f"Encrypted recovery file saved to:\n{path}\n\n"
+        parent, "Backup key saved",
+        f"Backup key file saved to:\n{path}\n\n"
         "Move it to a USB drive or another safe offline place.",
     )
     return True
@@ -85,12 +86,12 @@ class RecoveryKeyDialog(_BaseDialog):
 
     def __init__(self, recovery_key: str, username: str, parent=None):
         super().__init__(parent, width=560)
-        self.setWindowTitle("Save Your Recovery Key")
+        self.setWindowTitle("Save Your Backup Key")
         self._recovery_key = recovery_key
         self._username = username
 
-        _header(self.body, "Save your recovery key",
-                "This is the only way back into your vault if you forget your master password. "
+        _header(self.body, "Save your backup key",
+                "If you ever forget your master password, this key is the only way back in. "
                 "It will not be shown again.")
 
         box = QFrame()
@@ -105,7 +106,7 @@ class RecoveryKeyDialog(_BaseDialog):
         self.body.addWidget(box)
 
         btn_row = QHBoxLayout()
-        save_btn = QPushButton("Save Encrypted Recovery File...")
+        save_btn = QPushButton("Save Backup Key File...")
         save_btn.clicked.connect(self._save_to_file)
         copy_btn = QPushButton("Copy Key")
         copy_btn.setObjectName("Secondary")
@@ -114,13 +115,13 @@ class RecoveryKeyDialog(_BaseDialog):
         btn_row.addWidget(copy_btn, 1)
         self.body.addLayout(btn_row)
 
-        warn = QLabel("Anyone with this key (or the recovery file) and your username can reset your "
-                      "master password. Keep it offline and private.")
+        warn = QLabel("Anyone with this key (or the file) and your username can reset your "
+                      "master password. Keep it somewhere private, like a USB drive or a printed copy.")
         warn.setObjectName("Warning")
         warn.setWordWrap(True)
         self.body.addWidget(warn)
 
-        self.ack_checkbox = QCheckBox("I have saved my recovery key somewhere safe")
+        self.ack_checkbox = QCheckBox("I have saved my backup key somewhere safe")
         self.body.addSpacing(4)
         self.body.addWidget(self.ack_checkbox)
 
@@ -139,14 +140,14 @@ class RecoveryKeyDialog(_BaseDialog):
         self.copy_feedback()
 
     def copy_feedback(self):
-        self.ack_checkbox.setText("I have saved my recovery key somewhere safe  (copied - clipboard clears in 25s)")
+        self.ack_checkbox.setText("I have saved my backup key somewhere safe  (copied - clipboard clears in 25s)")
 
     def reject(self):
         # Esc and the window close button both route through reject().
         if not self.ack_checkbox.isChecked():
             resp = QMessageBox.warning(
-                self, "Recovery key not saved",
-                "If you continue without saving your recovery key and later forget your "
+                self, "Backup key not saved",
+                "If you continue without saving your backup key and later forget your "
                 "master password, your vault cannot be recovered.\n\nContinue anyway?",
                 QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
             )
@@ -160,8 +161,8 @@ class TwoFactorPromptDialog(_BaseDialog):
 
     def __init__(self, parent=None):
         super().__init__(parent, width=380)
-        self.setWindowTitle("Two-Factor Authentication")
-        _header(self.body, "Two-factor authentication", "Enter the 6-digit code from your authenticator app.")
+        self.setWindowTitle("Login Code")
+        _header(self.body, "Enter your login code", "Open your authenticator app and type the 6-digit code.")
         self.code_edit = QLineEdit()
         self.code_edit.setPlaceholderText("123456")
         self.code_edit.setAlignment(Qt.AlignCenter)
@@ -186,12 +187,12 @@ class TwoFactorSetupDialog(_BaseDialog):
     def __init__(self, session, parent=None):
         super().__init__(parent, width=420)
         self.session = session
-        self.setWindowTitle("Set Up Two-Factor Authentication")
+        self.setWindowTitle("Set Up 2-Step Login")
 
         self.secret = totp_mod.generate_secret()
         qr_bytes = totp_mod.make_qr_png_bytes(self.secret, session.username)
 
-        _header(self.body, "Enable two-factor authentication",
+        _header(self.body, "Turn on 2-step login",
                 "1. Scan this QR code with Google Authenticator, Authy or Microsoft Authenticator.")
 
         qr_frame = QFrame()
@@ -234,7 +235,7 @@ class TwoFactorSetupDialog(_BaseDialog):
         self.error = _error_label()
         self.body.addWidget(self.error)
 
-        confirm_btn = QPushButton("Enable 2FA")
+        confirm_btn = QPushButton("Turn On")
         confirm_btn.clicked.connect(self._confirm)
         self.body.addWidget(confirm_btn)
 
@@ -295,7 +296,7 @@ class ChangePasswordDialog(_BaseDialog):
         super().__init__(parent, width=460)
         self.session = session
         self.setWindowTitle("Change Master Password")
-        _header(self.body, "Change master password", "Your vault stays encrypted; only the key wrapping changes.")
+        _header(self.body, "Change master password", "Your saved passwords stay exactly as they are.")
 
         self.current_pw = PasswordField("Current master password")
         self.new_pw = PasswordField("New master password")
@@ -432,17 +433,35 @@ class PasswordGeneratorDialog(_BaseDialog):
 
 
 class ItemEditorDialog(_BaseDialog):
-    def __init__(self, parent=None, item: vault.VaultItem = None):
-        super().__init__(parent, width=500)
+    def __init__(self, parent=None, item: vault.VaultItem = None, category: str = None):
+        super().__init__(parent, width=540)
         self.item = item
+        self._autofill = ("", "")  # name/website we filled in from the picked service
         self.setWindowTitle("Edit Entry" if item else "New Entry")
         _header(self.body, "Edit entry" if item else "New entry",
-                "Everything here is encrypted with AES-256-GCM before it is saved.")
+                "Pick a service to fill in the details, or type your own.")
+
+        self.category_combo = QComboBox()
+        self.category_combo.setIconSize(QSize(22, 22))
+        for cat in brands.CATEGORIES:
+            self.category_combo.addItem(symbol_icon(cat.symbol, cat.color, 22), cat.label, cat.key)
+        self.service_combo = QComboBox()
+        self.service_combo.setIconSize(QSize(22, 22))
+        self.service_combo.setMaxVisibleItems(12)
+        pick_row = QHBoxLayout()
+        pick_row.setSpacing(12)
+        for label, combo in (("Category", self.category_combo), ("Service", self.service_combo)):
+            col = QVBoxLayout()
+            col.setSpacing(8)
+            _field(col, label, combo)
+            pick_row.addLayout(col, 1)
+        self.body.addLayout(pick_row)
 
         self.title_edit = QLineEdit(item.title if item else "")
-        self.title_edit.setPlaceholderText("e.g. Gmail")
+        self.title_edit.setPlaceholderText("e.g. My salary account")
         self.site_edit = QLineEdit(item.website_or_app if item else "")
         self.site_edit.setPlaceholderText("e.g. mail.google.com or Spotify app")
+        self.site_edit.editingFinished.connect(self._detect_service)
         self.username_edit = QLineEdit(item.username if item else "")
         self.username_edit.setPlaceholderText("you@example.com")
 
@@ -458,10 +477,10 @@ class ItemEditorDialog(_BaseDialog):
         self.password.edit.textChanged.connect(self._update_meter)
 
         self.notes_edit = QPlainTextEdit(item.notes if item else "")
-        self.notes_edit.setPlaceholderText("Optional: security questions, recovery codes, PINs...")
-        self.notes_edit.setFixedHeight(90)
+        self.notes_edit.setPlaceholderText("Optional: security questions, PINs, account number...")
+        self.notes_edit.setFixedHeight(72)
 
-        _field(self.body, "Title", self.title_edit)
+        _field(self.body, "Name", self.title_edit)
         _field(self.body, "Website / App", self.site_edit)
         _field(self.body, "Username / Email", self.username_edit)
         _field(self.body, "Password", self.password)
@@ -484,8 +503,61 @@ class ItemEditorDialog(_BaseDialog):
         self.body.addSpacing(6)
         self.body.addLayout(btn_row)
 
+        initial_cat = item.category if item else (category or brands.DEFAULT_CATEGORY)
+        self._select_data(self.category_combo, initial_cat)
+        self._populate_services(item.brand if item else "")
+        if item and item.brand in brands.BRAND_BY_KEY:
+            b = brands.BRAND_BY_KEY[item.brand]
+            self._autofill = (b.name, b.domain)
+        self.category_combo.currentIndexChanged.connect(self._on_category_changed)
+        self.service_combo.currentIndexChanged.connect(self._on_service_changed)
+
         self._update_meter()
-        self.title_edit.setFocus()
+        (self.title_edit if item else self.service_combo).setFocus()
+
+    @staticmethod
+    def _select_data(combo: QComboBox, data):
+        index = combo.findData(data)
+        combo.setCurrentIndex(max(index, 0))
+
+    def _populate_services(self, select_key: str = ""):
+        cat = brands.CATEGORY_BY_KEY[self.category_combo.currentData()]
+        self.service_combo.blockSignals(True)
+        self.service_combo.clear()
+        self.service_combo.addItem(symbol_icon(cat.symbol, cat.color, 22), "Other / custom", "")
+        for b in brands.brands_in(cat.key):
+            self.service_combo.addItem(brand_icon(b, 22), b.name, b.key)
+        self._select_data(self.service_combo, select_key)
+        self.service_combo.blockSignals(False)
+
+    def _on_category_changed(self, *_):
+        self._populate_services()
+        self._on_service_changed()
+
+    def _on_service_changed(self, *_):
+        brand = brands.BRAND_BY_KEY.get(self.service_combo.currentData())
+        old_name, old_site = self._autofill
+        new_name, new_site = (brand.name, brand.domain) if brand else ("", "")
+        # Only overwrite text the user hasn't typed themselves.
+        if self.title_edit.text().strip() in ("", old_name):
+            self.title_edit.setText(new_name)
+        if self.site_edit.text().strip() in ("", old_site):
+            self.site_edit.setText(new_site)
+        self._autofill = (new_name, new_site)
+
+    def _detect_service(self):
+        if self.service_combo.currentData():
+            return
+        brand = brands.detect_brand(self.site_edit.text(), self.title_edit.text())
+        if brand is None:
+            return
+        self.category_combo.blockSignals(True)
+        self._select_data(self.category_combo, brand.category)
+        self.category_combo.blockSignals(False)
+        self._populate_services(brand.key)
+        if not self.title_edit.text().strip():
+            self.title_edit.setText(brand.name)
+        self._autofill = (brand.name, brand.domain)
 
     def _update_meter(self, *_):
         self.meter.update_for(self.password.text(), [self.username_edit.text(), self.title_edit.text()])
@@ -499,7 +571,7 @@ class ItemEditorDialog(_BaseDialog):
         set_error(self.title_edit, no_name)
         set_error(self.site_edit, no_name)
         if no_name:
-            problems.append("Enter a title or a website/app name.")
+            problems.append("Pick a service or enter a name.")
         no_password = not self.password.text()
         set_error(self.password.edit, no_password)
         if no_password:
@@ -517,6 +589,8 @@ class ItemEditorDialog(_BaseDialog):
             username=self.username_edit.text().strip(),
             password=self.password.text(),
             notes=self.notes_edit.toPlainText().strip(),
+            category=self.category_combo.currentData(),
+            brand=self.service_combo.currentData() or "",
         )
 
 
