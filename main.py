@@ -1,8 +1,8 @@
 """
-SecureVaultPM entry point.
+Vaultix entry point.
 
-Hosts the auth screen and the vault screen in one maximized window and
-handles locking (manual and after inactivity).
+Hosts the intro animation, the auth screen and the vault screen in one
+maximized window and handles locking (manual and after inactivity).
 """
 
 import sys
@@ -13,18 +13,19 @@ from PySide6.QtWidgets import (
 )
 
 from app import db
+from app.branding import APP_NAME
 from ui.auth_window import AuthWindow
 from ui.main_window import MainWindow
 from ui.security import InactivityGuard, shared_clipboard_guard
+from ui.splash import SplashScreen
 from ui.styles import APP_STYLE
 from ui.widgets import app_icon, fade_in
 
-APP_NAME = "SecureVaultPM"
 _ACTIVITY_EVENTS = {QEvent.MouseButtonPress, QEvent.MouseMove, QEvent.KeyPress, QEvent.Wheel}
 
 
 class AppWindow(QWidget):
-    def __init__(self):
+    def __init__(self, show_intro: bool = True):
         super().__init__()
         self.setObjectName("AppRoot")
         self.setAttribute(Qt.WA_StyledBackground, True)
@@ -42,9 +43,28 @@ class AppWindow(QWidget):
         self.auth_window.authenticated.connect(self._on_authenticated)
         self.stack.addWidget(self.auth_window)
 
+        self.splash = None
+        if show_intro:
+            self.splash = SplashScreen()
+            self.splash.finished.connect(self._end_intro)
+            self.stack.addWidget(self.splash)
+            self.stack.setCurrentWidget(self.splash)
+
         self.main_window = None
         self.inactivity_guard = InactivityGuard(timeout_minutes=5, parent=self)
         self.inactivity_guard.locked.connect(self._lock)
+
+    def start_intro(self):
+        if self.splash is not None:
+            self.splash.start()
+
+    def _end_intro(self):
+        self.stack.setCurrentWidget(self.auth_window)
+        self.stack.removeWidget(self.splash)
+        self.splash.deleteLater()
+        self.splash = None
+        self.auth_window.focus_login()
+        fade_in(self.auth_window, 420)
 
     @property
     def unlocked(self) -> bool:
@@ -125,6 +145,7 @@ def main():
     app.installEventFilter(event_filter)
     app.aboutToQuit.connect(shared_clipboard_guard().clear_now)
     window.showMaximized()
+    window.start_intro()
     sys.exit(app.exec())
 
 

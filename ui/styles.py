@@ -8,6 +8,7 @@ TEXT = "#e9ebf8"
 MUTED = "#8a90b8"
 ACCENT = "#7c5cff"
 ACCENT_2 = "#22d3ee"
+BRAND_BLUE = "#2f8cff"
 SUCCESS = "#22c55e"
 DANGER = "#ef4444"
 

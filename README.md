@@ -1,7 +1,14 @@
-# SecureVaultPM
+<p align="center"><img src="assets/vaultix_logo.png" width="160" alt="Vaultix logo"></p>
 
-A professional, open-source desktop password manager built with Python and PySide6. All passwords are encrypted end-to-end on your local machine — no cloud, no telemetry, no third-party servers.
+# Vaultix
 
+**Your secrets, your security.**
+
+Vaultix is a desktop password manager built with Python and PySide6. All passwords are encrypted on your own computer — no cloud, no telemetry, no third-party servers.
+
+Created by **Ali Khan**.
+
+![Intro](docs/screenshots/splash.png)
 ![Sign-in screen](docs/screenshots/auth.png)
 ![Vault screen](docs/screenshots/vault.png)
 
@@ -9,6 +16,7 @@ A professional, open-source desktop password manager built with Python and PySid
 
 ## Features
 
+- **Animated intro** — the Vaultix shield, name and tagline play for a few seconds before the login screen (click or press any key to skip)
 - **Categories** — Banks, Digital Wallets, Streaming, Music, Email, Social Media, Developer, Shopping & Rides, Gaming, Work & Cloud, and Other, with live counts in a sidebar
 - **Real brand logos** — 90+ services (HBL, UBL, MCB, Meezan, Alfalah, JazzCash, Easypaisa, Netflix, Spotify, Gmail, GitHub, Daraz...) bundled offline; the service is picked from a list or detected from the website you type
 - **Plain-language interface** — friendly wording for everyday users ("backup key", "2-step login") with no crypto jargon on screen
@@ -65,8 +73,8 @@ The recovery key wraps the same DEK independently, so either the master password
 ## Installation
 
 ```bash
-git clone https://github.com/yourusername/securevaultpm.git
-cd securevaultpm
+git clone https://github.com/yourusername/vaultix.git
+cd vaultix
 
 python -m venv venv
 
@@ -98,10 +106,11 @@ python main.py
 ## Project Structure
 
 ```
-securevaultpm/
+vaultix/
 ├── main.py               # Entry point, app wiring, inactivity guard
 ├── requirements.txt
 ├── app/
+│   ├── branding.py       # App name, tagline, creator, version
 │   ├── brands.py         # Categories and the brand catalog (name, category, domain, logo)
 │   ├── crypto.py         # Argon2id KDF, AES-256-GCM encrypt/decrypt, DEK wrap/unwrap
 │   ├── db.py             # SQLite schema and all parameterized queries
@@ -110,13 +119,17 @@ securevaultpm/
 │   ├── totp.py           # TOTP 2FA setup, QR generation, code verification
 │   ├── recovery.py       # Recovery key file write/read, key rotation
 │   └── paths.py          # OS-appropriate app data directory
-├── assets/logos/         # Bundled 128px brand logos (no network access at runtime)
+├── assets/
+│   ├── vaultix_logo.png  # Shield logo with glow (intro, login, About)
+│   ├── vaultix_icon.png  # Compact shield (window/taskbar icon, header)
+│   └── logos/            # Bundled 128px brand logos (no network access at runtime)
 └── ui/
     ├── styles.py          # Qt stylesheet (dark theme)
     ├── security.py        # InactivityGuard, ClipboardGuard
+    ├── splash.py          # Animated intro screen
     ├── auth_window.py     # Login / Register / Recovery tabs
     ├── main_window.py     # Vault list, search, actions, settings menu
-    └── dialogs.py         # Item editor, password generator, 2FA setup, recovery key display
+    └── dialogs.py         # Item editor, password generator, 2FA setup, recovery key display, About
 ```
 
 ---
@@ -127,9 +140,9 @@ Vault data is stored locally at:
 
 | Platform | Path |
 |----------|------|
-| Windows  | `%APPDATA%\SecureVaultPM\vault.db` |
-| macOS    | `~/Library/Application Support/SecureVaultPM/vault.db` |
-| Linux    | `~/.local/share/SecureVaultPM/vault.db` |
+| Windows  | `%APPDATA%\Vaultix\vault.db` |
+| macOS    | `~/Library/Application Support/Vaultix/vault.db` |
+| Linux    | `~/.local/share/Vaultix/vault.db` |
 
 The `.db` file contains only encrypted blobs. Without the master password or recovery key it is unreadable.
 
@@ -145,7 +158,7 @@ XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX
 
 You can save it as an encrypted `.svrk` file and load it later from **Forgot Password → Open Backup Key File**. The file is encrypted with a key built into the app, so it protects against casual reading and tampering, not against someone with the source code — treat it like the key itself.
 
-**Store it offline** (USB drive, printed copy, safe). Anyone with this key and your username can reset your master password. SecureVaultPM has no server — if you lose both your password and this key, vault data cannot be recovered.
+**Store it offline** (USB drive, printed copy, safe). Anyone with this key and your username can reset your master password. Vaultix has no server — if you lose both your password and this key, vault data cannot be recovered.
 
 ---
 

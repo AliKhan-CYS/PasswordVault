@@ -3,6 +3,8 @@
 import os
 import sys
 
+from app.branding import APP_NAME
+
 
 def app_data_dir() -> str:
     if sys.platform == "win32":
@@ -11,7 +13,7 @@ def app_data_dir() -> str:
         base = os.path.expanduser("~/Library/Application Support")
     else:
         base = os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
-    path = os.path.join(base, "SecureVaultPM")
+    path = os.path.join(base, APP_NAME)
     os.makedirs(path, exist_ok=True)
     return path
 
