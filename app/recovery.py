@@ -23,7 +23,8 @@ from app import db, crypto
 from app.auth import Session, AuthError
 
 RECOVERY_FILE_EXT = ".svrk"
-RECOVERY_FILE_FILTER = "SecureVault Backup Key (*.svrk)"
+RECOVERY_FILE_FILTER = "Vaultix Backup Key (*.svrk)"
+# File-format constants: changing them would make existing backup files unreadable.
 _MAGIC = b"SVPM-RK2"
 _FILE_KEY = hashlib.sha256(b"SecureVaultPM/recovery-file/v2/" + _MAGIC).digest()
 _LEGACY_HEADER = "SECUREVAULTPM-RECOVERY-TOKEN-V1"
@@ -45,7 +46,7 @@ def write_recovery_file(path: str, username: str, recovery_key: str):
 def _key_fields(data) -> dict:
     if not isinstance(data, dict) or not isinstance(data.get("username"), str) \
             or not isinstance(data.get("recovery_key"), str):
-        raise AuthError("This is not a SecureVault backup key file.")
+        raise AuthError("This is not a Vaultix backup key file.")
     return {"username": data["username"], "recovery_key": data["recovery_key"]}
 
 
@@ -54,7 +55,7 @@ def read_recovery_file(path: str) -> dict:
     with open(path, "r", encoding="utf-8", errors="replace") as f:
         content = f.read(_MAX_FILE_CHARS + 1).strip()
     if len(content) > _MAX_FILE_CHARS:
-        raise AuthError("This is not a SecureVault backup key file.")
+        raise AuthError("This is not a Vaultix backup key file.")
 
     if content.startswith("{"):
         # Plaintext JSON files from v1 of the app.
@@ -64,14 +65,14 @@ def read_recovery_file(path: str) -> dict:
             data = {}
         if isinstance(data, dict) and data.get("header") == _LEGACY_HEADER:
             return _key_fields(data)
-        raise AuthError("This is not a SecureVault backup key file.")
+        raise AuthError("This is not a Vaultix backup key file.")
 
     try:
         blob = base64.b64decode("".join(content.split()), validate=True)
     except ValueError:
-        raise AuthError("This is not a SecureVault backup key file.")
+        raise AuthError("This is not a Vaultix backup key file.")
     if not blob.startswith(_MAGIC):
-        raise AuthError("This is not a SecureVault backup key file.")
+        raise AuthError("This is not a Vaultix backup key file.")
     try:
         payload = crypto.decrypt(_FILE_KEY, blob[len(_MAGIC):], aad=_MAGIC)
     except InvalidTag:

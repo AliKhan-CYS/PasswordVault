@@ -9,8 +9,9 @@ from PySide6.QtWidgets import (
 
 from app import db, auth, brands, recovery as recovery_mod
 from app.auth import AuthError, TwoFactorRequiredError
+from app.branding import CREATOR
 from ui.dialogs import RecoveryKeyDialog, TwoFactorPromptDialog
-from ui.styles import ACCENT_2, MUTED
+from ui.styles import ACCENT_2, BRAND_BLUE, MUTED
 from ui.widgets import (
     PasswordField, StrengthMeter, RuleChecklist, run_in_background, set_busy, set_error,
     logo_pixmap, shake, entry_icon_pixmap,
@@ -85,14 +86,14 @@ class AuthWindow(QWidget):
         layout.setSpacing(14)
 
         logo = QLabel()
-        logo.setPixmap(logo_pixmap(84))
+        logo.setPixmap(logo_pixmap(128, glow=True))
         layout.addWidget(logo)
 
-        title = QLabel("SecureVault")
-        title.setStyleSheet("font-size: 44px; font-weight: 800; color: white;")
+        title = QLabel(f"Vaulti<span style='color:{BRAND_BLUE}'>x</span>")
+        title.setStyleSheet("font-size: 48px; font-weight: 800; color: white; letter-spacing: 1px;")
         layout.addWidget(title)
 
-        tagline = QLabel(f"All your passwords.<br><span style='color:{ACCENT_2}'>Safe in one place.</span>")
+        tagline = QLabel(f"Your secrets,<br><span style='color:{BRAND_BLUE}'>your security.</span>")
         tagline.setStyleSheet("font-size: 22px; font-weight: 600; color: #e9ebf8;")
         tagline.setWordWrap(True)
         layout.addWidget(tagline)
@@ -126,6 +127,11 @@ class AuthWindow(QWidget):
             strip.addWidget(logo_lbl)
         strip.addStretch()
         layout.addLayout(strip)
+
+        layout.addSpacing(18)
+        credit = QLabel(f"Created by <b style='color:#e9ebf8'>{CREATOR}</b>")
+        credit.setObjectName("Muted")
+        layout.addWidget(credit)
         return hero
 
     def _build_card(self) -> QFrame:

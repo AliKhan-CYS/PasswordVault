@@ -15,10 +15,10 @@ from app import vault, totp as totp_mod, recovery as recovery_mod, db, brands
 from app.auth import Session
 from ui.dialogs import (
     ItemEditorDialog, PasswordGeneratorDialog, TwoFactorSetupDialog, ChangePasswordDialog,
-    RecoveryKeyDialog, ConfirmPasswordDialog, AutoLockDialog,
+    RecoveryKeyDialog, ConfirmPasswordDialog, AutoLockDialog, AboutDialog,
 )
 from ui.security import shared_clipboard_guard
-from ui.styles import ACCENT, MUTED, SURFACE_2
+from ui.styles import ACCENT, BRAND_BLUE, MUTED, SURFACE_2
 from ui.widgets import (
     StrengthMeter, Toast, logo_pixmap, avatar_pixmap, run_in_background, fade_in,
     draw_entry_icon, entry_icon_pixmap, draw_symbol_tile,
@@ -248,8 +248,8 @@ class MainWindow(QWidget):
         layout.setSpacing(10)
 
         logo = QLabel()
-        logo.setPixmap(logo_pixmap(36))
-        title = QLabel("SecureVault")
+        logo.setPixmap(logo_pixmap(38))
+        title = QLabel(f"Vaulti<span style='color:{BRAND_BLUE}'>x</span>")
         title.setObjectName("HeaderTitle")
         layout.addWidget(logo)
         layout.addWidget(title)
@@ -399,7 +399,7 @@ class MainWindow(QWidget):
         layout.setAlignment(Qt.AlignCenter)
         layout.setSpacing(10)
         logo = QLabel()
-        logo.setPixmap(logo_pixmap(76))
+        logo.setPixmap(logo_pixmap(110, glow=True))
         logo.setAlignment(Qt.AlignCenter)
         self.empty_title = QLabel()
         self.empty_title.setObjectName("DetailTitle")
@@ -725,6 +725,7 @@ class MainWindow(QWidget):
         menu.addAction("Auto-Lock Timer...", self._configure_auto_lock)
         menu.addSeparator()
         menu.addAction("Password Generator", self._open_generator)
+        menu.addAction("About Vaultix", lambda: AboutDialog(self).exec())
         menu.addAction("Lock Vault", self.locked.emit)
 
         # Drop the menu just under the button, right edges aligned.

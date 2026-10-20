@@ -9,10 +9,12 @@ from PySide6.QtWidgets import (
 )
 
 from app import totp as totp_mod, vault, recovery as recovery_mod, auth as auth_mod, brands
+from app.branding import APP_NAME, CREATOR, TAGLINE, VERSION
 from ui.security import shared_clipboard_guard
+from ui.styles import BRAND_BLUE
 from ui.widgets import (
     PasswordField, StrengthMeter, RuleChecklist, run_in_background, set_busy, set_error,
-    symbol_icon, brand_icon,
+    symbol_icon, brand_icon, logo_pixmap,
 )
 
 
@@ -61,7 +63,7 @@ class _BaseDialog(QDialog):
 def save_recovery_file_dialog(parent, username: str, recovery_key: str) -> bool:
     path, _ = QFileDialog.getSaveFileName(
         parent, "Save Backup Key File",
-        f"{username}_recovery{recovery_mod.RECOVERY_FILE_EXT}", recovery_mod.RECOVERY_FILE_FILTER,
+        f"{username} - {APP_NAME} backup key{recovery_mod.RECOVERY_FILE_EXT}", recovery_mod.RECOVERY_FILE_FILTER,
     )
     if not path:
         return False
@@ -611,3 +613,36 @@ class AutoLockDialog(_BaseDialog):
 
     def minutes(self) -> int:
         return self.spin.value()
+
+
+class AboutDialog(_BaseDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent, width=360)
+        self.setWindowTitle(f"About {APP_NAME}")
+        self.body.setAlignment(Qt.AlignHCenter)
+        for widget in (
+            _centered_label(pixmap=logo_pixmap(120, glow=True)),
+            _centered_label(f"Vaulti<span style='color:{BRAND_BLUE}'>x</span>",
+                            "font-size: 30px; font-weight: 800; color: white;"),
+            _centered_label(TAGLINE, "font-size: 15px; color: #e9ebf8;"),
+            _centered_label(f"Version {VERSION}", object_name="Muted"),
+        ):
+            self.body.addWidget(widget)
+        self.body.addSpacing(10)
+        self.body.addWidget(_centered_label(f"Created by <b style='color:white'>{CREATOR}</b>", object_name="Muted"))
+        self.body.addSpacing(10)
+        btn = QPushButton("Close")
+        btn.clicked.connect(self.accept)
+        self.body.addWidget(btn)
+
+
+def _centered_label(text: str = "", style: str = "", object_name: str = "", pixmap=None) -> QLabel:
+    lbl = QLabel(text)
+    lbl.setAlignment(Qt.AlignCenter)
+    if pixmap is not None:
+        lbl.setPixmap(pixmap)
+    if style:
+        lbl.setStyleSheet(style)
+    if object_name:
+        lbl.setObjectName(object_name)
+    return lbl

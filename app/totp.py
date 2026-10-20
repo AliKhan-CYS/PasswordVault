@@ -12,13 +12,14 @@ import qrcode
 
 from app import db, crypto
 from app.auth import Session
+from app.branding import APP_NAME
 
 
 def generate_secret() -> str:
     return pyotp.random_base32()
 
 
-def make_qr_png_bytes(secret: str, username: str, issuer: str = "SecureVaultPM") -> bytes:
+def make_qr_png_bytes(secret: str, username: str, issuer: str = APP_NAME) -> bytes:
     uri = pyotp.totp.TOTP(secret).provisioning_uri(name=username, issuer_name=issuer)
     img = qrcode.make(uri)
     buf = io.BytesIO()

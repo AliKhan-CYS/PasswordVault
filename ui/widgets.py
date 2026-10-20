@@ -1,12 +1,13 @@
 """Reusable widgets and UI helpers."""
 
+import os
 import zlib
 
 from PySide6.QtCore import (
-    Qt, QObject, QRunnable, QThreadPool, Signal, Slot, QTimer, QRectF, QPointF,
+    Qt, QObject, QRunnable, QThreadPool, Signal, Slot, QTimer, QRectF,
     QPropertyAnimation, QEasingCurve, QSequentialAnimationGroup, QPoint,
 )
-from PySide6.QtGui import QPixmap, QPainter, QColor, QLinearGradient, QPen, QFont, QIcon, QImage, QPainterPath
+from PySide6.QtGui import QPixmap, QPainter, QColor, QLinearGradient, QFont, QIcon, QImage, QPainterPath
 from PySide6.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QGridLayout, QLineEdit, QPushButton, QLabel,
     QProgressBar, QGraphicsOpacityEffect, QApplication,
@@ -79,49 +80,32 @@ def set_busy(button: QPushButton, busy: bool, busy_text: str = "Please wait...")
 
 # ---------- painting ----------
 
-def logo_pixmap(size: int) -> QPixmap:
+ASSET_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets")
+_brand_images = {}
+
+
+def brand_image(glow: bool = False) -> QImage:
+    name = "vaultix_logo.png" if glow else "vaultix_icon.png"
+    if name not in _brand_images:
+        _brand_images[name] = QImage(os.path.join(ASSET_DIR, name))
+    return _brand_images[name]
+
+
+def logo_pixmap(size: int, glow: bool = False) -> QPixmap:
+    """The Vaultix shield; glow=True adds the blue halo for large hero use."""
     ratio = 2
-    pm = QPixmap(size * ratio, size * ratio)
-    pm.fill(Qt.transparent)
-    s = size * ratio
-    p = QPainter(pm)
-    p.setRenderHint(QPainter.Antialiasing)
-
-    grad = QLinearGradient(0, 0, s, s)
-    grad.setColorAt(0, QColor("#8b5cf6"))
-    grad.setColorAt(1, QColor("#06b6d4"))
-    p.setPen(Qt.NoPen)
-    p.setBrush(grad)
-    p.drawRoundedRect(QRectF(0, 0, s, s), s * 0.28, s * 0.28)
-
-    pen = QPen(QColor("white"), s * 0.075)
-    pen.setCapStyle(Qt.RoundCap)
-    p.setPen(pen)
-    p.setBrush(Qt.NoBrush)
-    sw, sy = s * 0.32, s * 0.19
-    sx = (s - sw) / 2
-    p.drawArc(QRectF(sx, sy, sw, sw), 0, 180 * 16)
-    p.drawLine(QPointF(sx, sy + sw / 2), QPointF(sx, s * 0.47))
-    p.drawLine(QPointF(sx + sw, sy + sw / 2), QPointF(sx + sw, s * 0.47))
-
-    p.setPen(Qt.NoPen)
-    p.setBrush(QColor("white"))
-    bw, bh = s * 0.52, s * 0.37
-    bx, by = (s - bw) / 2, s * 0.44
-    p.drawRoundedRect(QRectF(bx, by, bw, bh), s * 0.07, s * 0.07)
-
-    p.setBrush(QColor("#6d28d9"))
-    kr = s * 0.055
-    cx, cy = s / 2, by + bh * 0.40
-    p.drawEllipse(QPointF(cx, cy), kr, kr)
-    p.drawRoundedRect(QRectF(cx - kr * 0.45, cy, kr * 0.9, bh * 0.32), kr * 0.3, kr * 0.3)
-    p.end()
+    img = brand_image(glow).scaled(size * ratio, size * ratio, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+    pm = QPixmap.fromImage(img)
     pm.setDevicePixelRatio(ratio)
     return pm
 
 
 def app_icon() -> QIcon:
-    return QIcon(logo_pixmap(128))
+    icon = QIcon()
+    for size in (16, 24, 32, 48, 64, 128, 256):
+        icon.addPixmap(QPixmap.fromImage(
+            brand_image().scaled(size, size, Qt.KeepAspectRatio, Qt.SmoothTransformation)))
+    return icon
 
 
 def avatar_color(text: str) -> QColor:
