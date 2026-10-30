@@ -1,6 +1,7 @@
 """Reusable widgets and UI helpers."""
 
 import os
+import sys
 import zlib
 
 from PySide6.QtCore import (
@@ -14,7 +15,7 @@ from PySide6.QtWidgets import (
 )
 
 from app import vault, auth
-from ui.styles import STRENGTH_COLORS, AVATAR_COLORS, SUCCESS, MUTED
+from ui.styles import STRENGTH_COLORS, AVATAR_COLORS, SUCCESS, MUTED, SURFACE, TEXT
 
 
 # ---------- background work ----------
@@ -76,6 +77,25 @@ def set_busy(button: QPushButton, busy: bool, busy_text: str = "Please wait...")
         button.setText(button.property("idle_text") or button.text())
         button.setEnabled(True)
         QApplication.restoreOverrideCursor()
+
+
+def theme_title_bar(window: QWidget):
+    """Dark native title bar on Windows 10+; on Windows 11 it also takes the header colour."""
+    if sys.platform != "win32":
+        return
+    import ctypes
+    hwnd = ctypes.c_void_p(int(window.winId()))
+    set_attr = ctypes.windll.dwmapi.DwmSetWindowAttribute
+
+    def apply(attr: int, value: int) -> bool:
+        v = ctypes.c_int(value)
+        return set_attr(hwnd, attr, ctypes.byref(v), ctypes.sizeof(v)) == 0
+
+    # DWMWA_USE_IMMERSIVE_DARK_MODE is 20, or 19 on Windows 10 builds before 20H1.
+    apply(20, 1) or apply(19, 1)
+    caption, text = QColor(SURFACE), QColor(TEXT)
+    apply(35, caption.red() | caption.green() << 8 | caption.blue() << 16)  # DWMWA_CAPTION_COLOR
+    apply(36, text.red() | text.green() << 8 | text.blue() << 16)  # DWMWA_TEXT_COLOR
 
 
 # ---------- painting ----------
