@@ -19,7 +19,7 @@ from ui.main_window import MainWindow
 from ui.security import InactivityGuard, shared_clipboard_guard
 from ui.splash import SplashScreen
 from ui.styles import APP_STYLE
-from ui.widgets import app_icon, fade_in
+from ui.widgets import app_icon, fade_in, theme_title_bar
 
 _ACTIVITY_EVENTS = {QEvent.MouseButtonPress, QEvent.MouseMove, QEvent.KeyPress, QEvent.Wheel}
 
@@ -125,6 +125,9 @@ class AppEventFilter(QObject):
             self._window.note_activity()
         elif etype == QEvent.Polish and isinstance(obj, (QPushButton, QCheckBox)):
             obj.setCursor(Qt.PointingHandCursor)
+        elif etype == QEvent.Show and isinstance(obj, QWidget) and obj.isWindow() \
+                and obj.windowType() in (Qt.Window, Qt.Dialog):
+            theme_title_bar(obj)
         return False
 
 
