@@ -12,3 +12,7 @@ screenshot_*.png
 .idea/
 *_recovery_token.json
 *.svrk
+
+# Local tooling, not part of the app
+.qoder/
+skills-lock.json
