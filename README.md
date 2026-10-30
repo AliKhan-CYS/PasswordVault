@@ -25,8 +25,8 @@ Created by **Ali Khan**.
 - **Zero-knowledge design** — your master password is never stored; only a wrapped key derived from it is kept
 - **Per-user Data Encryption Key (DEK)** — rotating your master password never requires re-encrypting the vault
 - **SQLite storage** — every field of an entry, including its category and service, is encrypted as one blob before touching the database
-- **Multiple user accounts** — each user has a completely independent vault and key
-- **Two-Factor Authentication (TOTP)** — compatible with Google Authenticator, Authy, and any RFC 6238 app
+- **Multiple user accounts** — each user has a completely independent vault and key; usernames are 3-32 characters (letters, numbers, spaces, `. _ - @`) and are not case-sensitive
+- **Two-Factor Authentication (TOTP)** — compatible with Google Authenticator, Authy, and any RFC 6238 app; each code works only once
 - **Backup (recovery) key** — a high-entropy offline key that can reset your master password without data loss
 - **Encrypted backup key file (`.svrk`)** — the key is saved in an app-only encrypted file; opened in a text editor it is scrambled text
 - **Master password rules** — at least 8 characters with an uppercase letter, a number and a special character, and it cannot be your username (or username + digits)
@@ -35,7 +35,7 @@ Created by **Ali Khan**.
 - **Password generator** — cryptographically secure, configurable length/charset, avoids ambiguous characters
 - **Password strength meter** — powered by zxcvbn (realistic crack-time estimates, not just character-class rules)
 - **Auto-lock** — vault locks automatically after configurable inactivity (default 5 minutes)
-- **Clipboard auto-clear** — copied passwords are wiped from the clipboard after 25 seconds
+- **Clipboard protection** — copied passwords are wiped from the clipboard after 25 seconds (and on lock/exit), and on Windows they are kept out of clipboard history (`Win+V`) and cloud clipboard sync
 - **Brute-force lockout** — account temporarily locks after 5 failed login or backup-key attempts
 
 ---

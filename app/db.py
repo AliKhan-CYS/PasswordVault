@@ -18,7 +18,7 @@ from app.paths import db_path
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT UNIQUE NOT NULL,
+    username TEXT UNIQUE NOT NULL COLLATE NOCASE,
 
     password_salt BLOB NOT NULL,
     password_time_cost INTEGER NOT NULL,
@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS users (
 
     totp_enabled INTEGER NOT NULL DEFAULT 0,
     totp_secret_encrypted BLOB,
+    totp_last_step INTEGER,
 
     auto_lock_minutes INTEGER NOT NULL DEFAULT 5,
     failed_attempts INTEGER NOT NULL DEFAULT 0,
@@ -68,10 +69,18 @@ def get_conn():
 def init_db():
     with get_conn() as conn:
         conn.executescript(SCHEMA)
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(users)")}
+        if "totp_last_step" not in columns:
+            conn.execute("ALTER TABLE users ADD COLUMN totp_last_step INTEGER")
+
+
+def utc_now() -> datetime.datetime:
+    # Naive UTC, matching the timestamps already stored in the database.
+    return datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
 
 
 def now_iso() -> str:
-    return datetime.datetime.utcnow().isoformat()
+    return utc_now().isoformat()
 
 
 # ---------- users ----------
@@ -102,7 +111,7 @@ def create_user(username: str, pw_salt, pw_params, wrapped_dek_password,
 
 def get_user_by_username(username: str):
     with get_conn() as conn:
-        cur = conn.execute("SELECT * FROM users WHERE username = ?", (username,))
+        cur = conn.execute("SELECT * FROM users WHERE username = ? COLLATE NOCASE", (username,))
         row = cur.fetchone()
         if row is None:
             return None
@@ -122,7 +131,7 @@ def get_user_by_id(user_id: int):
 
 def list_usernames():
     with get_conn() as conn:
-        cur = conn.execute("SELECT username FROM users ORDER BY username")
+        cur = conn.execute("SELECT username FROM users ORDER BY username COLLATE NOCASE")
         return [r[0] for r in cur.fetchall()]
 
 
@@ -153,9 +162,14 @@ def update_wrapped_dek_recovery(user_id: int, rec_salt, rec_params, wrapped_dek_
 def set_totp(user_id: int, enabled: bool, secret_encrypted):
     with get_conn() as conn:
         conn.execute(
-            "UPDATE users SET totp_enabled=?, totp_secret_encrypted=? WHERE id=?",
+            "UPDATE users SET totp_enabled=?, totp_secret_encrypted=?, totp_last_step=NULL WHERE id=?",
             (1 if enabled else 0, secret_encrypted, user_id),
         )
+
+
+def set_totp_last_step(user_id: int, step: int):
+    with get_conn() as conn:
+        conn.execute("UPDATE users SET totp_last_step=? WHERE id=?", (step, user_id))
 
 
 def record_failed_attempt(user_id: int, failed_attempts: int, locked_until: str | None):

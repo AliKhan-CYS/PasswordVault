@@ -12,7 +12,6 @@ the real protection is still keeping the file offline and private.
 """
 
 import base64
-import datetime
 import hashlib
 import json
 import textwrap
@@ -35,7 +34,7 @@ def write_recovery_file(path: str, username: str, recovery_key: str):
     payload = json.dumps({
         "username": username,
         "recovery_key": recovery_key,
-        "generated_at": datetime.datetime.utcnow().isoformat(),
+        "generated_at": db.now_iso(),
     }).encode("utf-8")
     blob = _MAGIC + crypto.encrypt(_FILE_KEY, payload, aad=_MAGIC)
     text = "\n".join(textwrap.wrap(base64.b64encode(blob).decode("ascii"), 64))
@@ -45,7 +44,8 @@ def write_recovery_file(path: str, username: str, recovery_key: str):
 
 def _key_fields(data) -> dict:
     if not isinstance(data, dict) or not isinstance(data.get("username"), str) \
-            or not isinstance(data.get("recovery_key"), str):
+            or not isinstance(data.get("recovery_key"), str) \
+            or not 0 < len(data["username"]) <= 64 or not 0 < len(data["recovery_key"]) <= 128:
         raise AuthError("This is not a Vaultix backup key file.")
     return {"username": data["username"], "recovery_key": data["recovery_key"]}
 
@@ -77,7 +77,11 @@ def read_recovery_file(path: str) -> dict:
         payload = crypto.decrypt(_FILE_KEY, blob[len(_MAGIC):], aad=_MAGIC)
     except InvalidTag:
         raise AuthError("This backup key file is damaged or has been changed.")
-    return _key_fields(json.loads(payload.decode("utf-8")))
+    try:
+        data = json.loads(payload.decode("utf-8"))
+    except ValueError:
+        raise AuthError("This backup key file is damaged or has been changed.")
+    return _key_fields(data)
 
 
 def regenerate_recovery_key(session: Session) -> str:

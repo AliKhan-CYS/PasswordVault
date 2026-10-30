@@ -2,11 +2,20 @@
 Runtime security hardening:
 - InactivityGuard: locks the vault after N minutes without user input.
 - ClipboardGuard: wipes the clipboard a short time after a password is
-  copied, so it doesn't linger for other apps/clipboard managers to read.
+  copied, so it doesn't linger for other apps/clipboard managers to read,
+  and on Windows flags it so it never enters clipboard history.
 """
 
-from PySide6.QtCore import QObject, QTimer, Signal
+import sys
+
+from PySide6.QtCore import QObject, QTimer, Signal, QMimeData, QByteArray
 from PySide6.QtWidgets import QApplication
+
+_WINDOWS_PRIVATE_FORMATS = (
+    "ExcludeClipboardContentFromMonitorProcessing",
+    "CanIncludeInClipboardHistory",
+    "CanUploadToCloudClipboard",
+)
 
 
 class InactivityGuard(QObject):
@@ -50,7 +59,13 @@ class ClipboardGuard(QObject):
 
     def copy(self, text: str):
         clipboard = QApplication.clipboard()
-        clipboard.setText(text)
+        mime = QMimeData()
+        mime.setText(text)
+        if sys.platform == "win32":
+            # Keep secrets out of Win+V clipboard history, cloud sync and clipboard monitors.
+            for fmt in _WINDOWS_PRIVATE_FORMATS:
+                mime.setData(f'application/x-qt-windows-mime;value="{fmt}"', QByteArray(b"\x00\x00\x00\x00"))
+        clipboard.setMimeData(mime)
         self._last_copied = text
         self._timer.start(self._seconds * 1000)
 

@@ -1,5 +1,7 @@
 """Login / Create Account / Forgot Password screen."""
 
+import html
+
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
@@ -28,6 +30,7 @@ def _field(layout: QVBoxLayout, label: str, widget):
 def _error_label() -> QLabel:
     lbl = QLabel()
     lbl.setObjectName("Error")
+    lbl.setTextFormat(Qt.PlainText)
     lbl.setWordWrap(True)
     lbl.hide()
     return lbl
@@ -268,6 +271,7 @@ class AuthWindow(QWidget):
         page, layout = _tab_page()
         self.reg_username = QLineEdit()
         self.reg_username.setPlaceholderText("Choose a username")
+        self.reg_username.setMaxLength(auth.USERNAME_MAX)
         self.reg_password = PasswordField("Master password")
         self.reg_confirm = PasswordField("Repeat master password")
         self.reg_meter = StrengthMeter()
@@ -394,7 +398,7 @@ class AuthWindow(QWidget):
         self.rec_username.setText(data["username"])
         self.rec_key.setText(data["recovery_key"])
         self.rec_file_status.setText(f"<span style='color:#22c55e'>&#10003; Backup key loaded for "
-                                     f"<b>{data['username']}</b></span>")
+                                     f"<b>{html.escape(data['username'])}</b></span>")
         self.rec_file_status.setTextFormat(Qt.RichText)
         _show_error(self.rec_error, "")
         self.rec_new.edit.setFocus()
