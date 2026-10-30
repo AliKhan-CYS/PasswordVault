@@ -8,6 +8,8 @@ Vaultix is a desktop password manager built with Python and PySide6. All passwor
 
 Created by **Ali Khan**.
 
+[![Download for Windows](https://img.shields.io/github/v/release/AliKhan-CYS/PasswordVault?label=Download%20for%20Windows&logo=windows)](https://github.com/AliKhan-CYS/PasswordVault/releases/latest)
+
 ![Intro](docs/screenshots/splash.png)
 ![Sign-in screen](docs/screenshots/auth.png)
 ![Vault screen](docs/screenshots/vault.png)
@@ -65,16 +67,60 @@ The recovery key wraps the same DEK independently, so either the master password
 
 ## Requirements
 
-- Python 3.10+
-- Windows / macOS / Linux
+| | Windows installer (recommended) | Run from source |
+|---|---|---|
+| Operating system | Windows 10 or 11, 64-bit | Windows, macOS or Linux |
+| Python | Not needed | Python 3.10+ |
+| Admin rights | Not needed (only for an all-users install) | Not needed |
+| Disk space | About 115 MB | About 300 MB including dependencies |
 
 ---
 
 ## Installation
 
+### Option 1 — Windows installer (recommended)
+
+No Python or other software is needed.
+
+1. Open the [**Releases page**](https://github.com/AliKhan-CYS/PasswordVault/releases/latest).
+2. Under **Assets**, download **`Vaultix-Setup-<version>.exe`** (for example `Vaultix-Setup-1.0.0.exe`).
+3. Double-click the file. If Windows shows **"Windows protected your PC"**, click **More info → Run anyway**. The installer is not code-signed yet, so SmartScreen warns about it.
+4. Choose **Install for me only** (no admin needed) or **Install for all users** (asks for admin permission).
+5. Follow the setup steps, optionally tick **Create a desktop shortcut**, then click **Finish** to start Vaultix.
+6. Create your account and **save your backup key** somewhere safe — it is the only way back in if you forget your master password.
+
+| Install type | Program folder |
+|---|---|
+| Just for me | `%LOCALAPPDATA%\Programs\Vaultix` |
+| All users | `C:\Program Files\Vaultix` |
+
+Vaultix is added to the Start Menu and to **Settings → Apps**.
+
+#### Verify your download (optional)
+
+Every release includes a `SHA256SUMS.txt` file. Open PowerShell in your Downloads folder and run:
+
+```powershell
+Get-FileHash .\Vaultix-Setup-1.0.0.exe -Algorithm SHA256
+```
+
+The result must match the value in `SHA256SUMS.txt` and on the release page. If it does not, delete the file and download it again.
+
+#### Updating
+
+Download the newer `Vaultix-Setup-<version>.exe` from the Releases page and run it — it installs over the old version (it will offer to close Vaultix if it is open). Your accounts and passwords are kept.
+
+#### Uninstalling
+
+Go to **Settings → Apps → Installed apps → Vaultix → Uninstall**, or use **Start Menu → Vaultix → Uninstall Vaultix**.
+
+Uninstalling removes only the program. Your vaults stay in `%APPDATA%\Vaultix`, so reinstalling picks up where you left off. To erase everything permanently, delete that folder as well — this cannot be undone.
+
+### Option 2 — Run from source (developers)
+
 ```bash
-git clone https://github.com/yourusername/vaultix.git
-cd vaultix
+git clone https://github.com/AliKhan-CYS/PasswordVault.git
+cd PasswordVault
 
 python -m venv venv
 
@@ -93,9 +139,7 @@ pip install -r requirements.txt
 > pip install -r requirements.txt
 > ```
 
----
-
-## Running
+Then start the app (with the virtual environment active):
 
 ```bash
 python main.py
@@ -106,7 +150,7 @@ python main.py
 ## Project Structure
 
 ```
-vaultix/
+PasswordVault/
 ├── main.py               # Entry point, app wiring, inactivity guard
 ├── requirements.txt
 ├── app/
@@ -145,6 +189,8 @@ Vault data is stored locally at:
 | Linux    | `~/.local/share/Vaultix/vault.db` |
 
 The `.db` file contains only encrypted blobs. Without the master password or recovery key it is unreadable.
+
+The installer version and the source version use the same data folder, and installing, updating or uninstalling never touches it.
 
 ---
 
