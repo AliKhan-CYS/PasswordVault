@@ -181,6 +181,7 @@ class FieldRow(QFrame):
         caption.setObjectName("FieldLabel")
         self.value = QLabel()
         self.value.setObjectName("Mono" if mono else "FieldValue")
+        self.value.setTextFormat(Qt.PlainText)
         self.value.setTextInteractionFlags(Qt.TextSelectableByMouse)
         self.value.setWordWrap(True)
         text_col.addWidget(caption)
@@ -263,6 +264,7 @@ class MainWindow(QWidget):
         avatar = QLabel()
         avatar.setPixmap(avatar_pixmap(self.session.username, 26))
         name = QLabel(self.session.username)
+        name.setTextFormat(Qt.PlainText)
         name.setStyleSheet("font-weight: 600;")
         chip_layout.addWidget(avatar)
         chip_layout.addWidget(name)
@@ -381,6 +383,7 @@ class MainWindow(QWidget):
 
         self.list_empty = QLabel()
         self.list_empty.setObjectName("Muted")
+        self.list_empty.setTextFormat(Qt.PlainText)
         self.list_empty.setAlignment(Qt.AlignCenter)
         self.list_empty.setWordWrap(True)
         layout.addWidget(self.list_empty, 1)
@@ -403,6 +406,7 @@ class MainWindow(QWidget):
         logo.setAlignment(Qt.AlignCenter)
         self.empty_title = QLabel()
         self.empty_title.setObjectName("DetailTitle")
+        self.empty_title.setTextFormat(Qt.PlainText)
         self.empty_title.setAlignment(Qt.AlignCenter)
         self.empty_sub = QLabel()
         self.empty_sub.setObjectName("Subtitle")
@@ -446,9 +450,11 @@ class MainWindow(QWidget):
         title_col.setSpacing(2)
         self.detail_title = QLabel()
         self.detail_title.setObjectName("DetailTitle")
+        self.detail_title.setTextFormat(Qt.PlainText)
         self.detail_title.setWordWrap(True)
         self.detail_site = QLabel()
         self.detail_site.setObjectName("Subtitle")
+        self.detail_site.setTextFormat(Qt.PlainText)
         title_col.addWidget(self.detail_title)
         title_col.addWidget(self.detail_site)
         top.addLayout(title_col, 1)
@@ -688,11 +694,12 @@ class MainWindow(QWidget):
         item = self._current
         if item is None or self.session is None:
             return
-        resp = QMessageBox.question(
-            self, "Delete entry",
-            f"Delete \u201c{display_name(item)}\u201d permanently?\nThis cannot be undone.",
-            QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
-        )
+        box = QMessageBox(QMessageBox.Question, "Delete entry",
+                          f"Delete \u201c{display_name(item)}\u201d permanently?\nThis cannot be undone.",
+                          QMessageBox.Yes | QMessageBox.No, self)
+        box.setTextFormat(Qt.PlainText)
+        box.setDefaultButton(QMessageBox.No)
+        resp = box.exec()
         if resp != QMessageBox.Yes or self.session is None:
             return
         row = self.list_widget.currentRow()
@@ -804,6 +811,8 @@ class MainWindow(QWidget):
             row.value.clear()
         self.detail_title.clear()
         self.detail_site.clear()
+        self.detail_avatar.clear()
+        self.detail_footer.clear()
         self.search_edit.clear()
         self._update_category_counts()
         self.detail_stack.setCurrentIndex(0)

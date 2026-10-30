@@ -7,6 +7,7 @@ used transiently to derive a key that unwraps (or wraps) the per-user DEK.
 """
 
 import re
+import sqlite3
 import datetime
 from dataclasses import dataclass
 from typing import Optional
@@ -89,6 +90,25 @@ def normalize_recovery_key(recovery_key: str) -> str:
     return recovery_key.strip().upper()
 
 
+USERNAME_MIN, USERNAME_MAX = 3, 32
+_USERNAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9 ._@-]*")
+
+
+def clean_username(username: str) -> str:
+    return " ".join(username.split())
+
+
+def validate_username(username: str) -> str:
+    """Return the cleaned username or raise AuthError."""
+    username = clean_username(username)
+    if not USERNAME_MIN <= len(username) <= USERNAME_MAX:
+        raise AuthError(f"Username must be {USERNAME_MIN}-{USERNAME_MAX} characters long.")
+    if not _USERNAME_RE.fullmatch(username):
+        raise AuthError("Username can only use letters, numbers, spaces and . _ - @\n"
+                        "and must start with a letter or number.")
+    return username
+
+
 # ---------- flows ----------
 
 def register_user(username: str, master_password: str) -> tuple[Session, str]:
@@ -96,11 +116,9 @@ def register_user(username: str, master_password: str) -> tuple[Session, str]:
     Create a new user. Returns (session, recovery_key). The recovery_key is
     shown to the user exactly once -- the app never stores it in plaintext.
     """
-    username = username.strip()
-    if not username:
-        raise AuthError("Username cannot be empty.")
+    username = validate_username(username)
     if db.get_user_by_username(username):
-        raise AuthError("Username already exists.")
+        raise AuthError("That username is already taken.")
     validate_master_password(username, master_password)
 
     dek = crypto.generate_key()
@@ -110,11 +128,14 @@ def register_user(username: str, master_password: str) -> tuple[Session, str]:
     rec_params = crypto.KdfParams(salt=crypto.generate_salt())
     wrapped_dek_recovery = crypto.wrap_dek(dek, crypto.derive_key(recovery_key, rec_params))
 
-    user_id = db.create_user(
-        username,
-        pw_params.salt, pw_params, wrapped_dek_password,
-        rec_params.salt, rec_params, wrapped_dek_recovery,
-    )
+    try:
+        user_id = db.create_user(
+            username,
+            pw_params.salt, pw_params, wrapped_dek_password,
+            rec_params.salt, rec_params, wrapped_dek_recovery,
+        )
+    except sqlite3.IntegrityError:
+        raise AuthError("That username is already taken.")
     return Session(user_id=user_id, username=username, dek=dek), recovery_key
 
 
@@ -122,7 +143,7 @@ def _check_lockout(user: dict):
     locked_until = user.get("locked_until")
     if not locked_until:
         return
-    remaining = datetime.datetime.fromisoformat(locked_until) - datetime.datetime.utcnow()
+    remaining = datetime.datetime.fromisoformat(locked_until) - db.utc_now()
     seconds = int(remaining.total_seconds())
     if seconds > 0:
         wait = f"{seconds // 60} min {seconds % 60} sec" if seconds >= 60 else f"{seconds} seconds"
@@ -130,7 +151,7 @@ def _check_lockout(user: dict):
 
 
 def login(username: str, master_password: str, totp_code: Optional[str] = None) -> Session:
-    user = db.get_user_by_username(username.strip())
+    user = db.get_user_by_username(clean_username(username))
     if not user:
         raise AuthError("Wrong username or password.")
 
@@ -148,9 +169,12 @@ def login(username: str, master_password: str, totp_code: Optional[str] = None) 
         secret = crypto.decrypt(dek, user["totp_secret_encrypted"]).decode("utf-8")
         if not totp_code:
             raise TwoFactorRequiredError("TOTP code required.")
-        if not totp_mod.verify_code(secret, totp_code):
+        step = totp_mod.matching_step(secret, totp_code, user.get("totp_last_step"))
+        if step is None:
             _on_failed_attempt(user)
-            raise AuthError("That login code is incorrect. Try the latest code from your app.")
+            raise AuthError("That login code is incorrect or was already used. "
+                            "Try the latest code from your app.")
+        db.set_totp_last_step(user["id"], step)
 
     db.reset_failed_attempts(user["id"])
     return Session(user_id=user["id"], username=user["username"], dek=dek)
@@ -161,7 +185,7 @@ def _on_failed_attempt(user: dict):
     locked_until = None
     if attempts >= MAX_FAILED_ATTEMPTS:
         locked_until = (
-            datetime.datetime.utcnow() + datetime.timedelta(minutes=LOCKOUT_MINUTES)
+            db.utc_now() + datetime.timedelta(minutes=LOCKOUT_MINUTES)
         ).isoformat()
         attempts = 0
     db.record_failed_attempt(user["id"], attempts, locked_until)
@@ -192,7 +216,7 @@ def change_master_password(session: Session, current_password: str, new_master_p
 def recover_account(username: str, recovery_key: str, new_master_password: str) -> Session:
     """Reset the master password using the recovery key, unwrapping the
     existing DEK so no vault data is lost."""
-    user = db.get_user_by_username(username.strip())
+    user = db.get_user_by_username(clean_username(username))
     if not user:
         raise AuthError("Wrong username or backup key.")
 

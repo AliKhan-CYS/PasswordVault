@@ -40,6 +40,7 @@ def _field(layout: QVBoxLayout, label: str, widget):
 def _error_label() -> QLabel:
     lbl = QLabel()
     lbl.setObjectName("Error")
+    lbl.setTextFormat(Qt.PlainText)
     lbl.setWordWrap(True)
     lbl.hide()
     return lbl
